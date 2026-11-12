@@ -1,147 +1,83 @@
 # OpenGrad Outreach Dashboard
 
-A one-page website that shows how OpenGrad's outreach to funders and partners is going:
-who we've emailed or messaged on LinkedIn, who replied, which follow-ups are due, and where
-each funder is in the funding pipeline.
+A private website that shows your email outreach at a glance: who you emailed, who replied,
+which follow-ups are coming, and lets you add new contacts or log outreach without opening the sheet.
 
-> **Right now it uses made-up demo data.** No logins, no Google Sheets, no Gmail, no API keys.
-> All names, companies and emails are fake.
+Plain HTML, CSS and JavaScript. No frameworks, no build step. Works on GitHub Pages, Netlify or Vercel unchanged.
 
-## What's on the page
-
-1. **Header**: when the data was last synced, plus a **Refresh** button.
-2. **Key numbers**: contacts, emails sent, LinkedIn outreach, responses, awaiting response, overdue follow-ups, and follow-ups due in the next 7 days.
-3. **What to do next**: a short to-do list worked out from the data. Each item has a button that jumps to the right section.
-4. **Follow-ups**: tabs for Overdue, Today, Next 7 days and Later. Each follow-up says exactly **what to do**:
-   - **Email**: send the intro or a follow-up email, or reply to theirs.
-   - **LinkedIn**: send a connection request, a message, or a follow-up.
-   - **Set up a call**: they replied and are interested, so book a call.
-   - **After a call**: we already had a call, so the row shows how it went (for example *Positive – moving ahead* or *Needs more information*) and what to do now, such as "Email the information they asked for".
-
-   You can also filter by type of follow-up (Email / LinkedIn / Set up a call / After a call / Proposal).
-   "Mark sent", "Mark done" and "Call done" update the row. For now this only changes what's on your screen and resets when you refresh.
-5. **Recent replies**: who wrote back, whether they're interested in funding, the funding status, and the call outcome if we've had a call.
-6. **Charts**: the funding pipeline, outreach per week, and a breakdown of what we're reaching out for.
-7. **All outreach**: a searchable, filterable and sortable table of every contact. Rows with missing information get a **Needs details** tag.
-
-## Folder structure
+## How it fits together
 
 ```
-.
-├── index.html                 Page shell
-├── package.json               Scripts and libraries
-├── vite.config.js             Build settings (base './' so GitHub Pages works)
-├── vercel.json                Vercel: send every URL to the app
-├── public/_redirects          Netlify: same as above
-├── .github/workflows/deploy.yml   Auto-deploy to GitHub Pages on push to main
-└── src/
-    ├── App.jsx                Lays out the page, top to bottom
-    ├── config/
-    │   ├── lists.js           Allowed values (Reaching out for, Next step, Funding status…) and badge colors
-    │   └── settings.js        Small knobs: "next 7 days" window, weeks in chart, rows per page…
-    ├── data/mockData.js       ~25 fake contacts, with dates relative to today
-    ├── services/dataSource.js The ONLY place data is loaded from (swap this for real data later)
-    ├── hooks/useOutreach.js   Loading, refresh, error and "Mark done"
-    ├── utils/                 Pure functions that work out every number, list and chart from the records
-    └── components/            Header, StatCard, NextStepsPanel, FollowUpTabs, ResponsesList,
-                               PipelineChart, WeeklyChart, OutreachTable, StatusBadge, Skeleton, EmptyState
+Gmail (label "Outreach")
+   │  your hourly sheet script (unchanged) tracks threads, sends follow-ups 1 and 2,
+   ▼  detects replies and bounces
+Google Sheet ── "Follow-up Log" tab (read only for the website)
+             └─ "Leads" tab (contacts you add / outreach you log from the website)
+   ▲
+   │  apps-script/Code.gs: a small JSON API (separate Apps Script project)
+   ▼
+This website (any static host) asks the API for data with your private token
 ```
 
-## Run it on your computer
+The website never talks to Gmail or Sheets directly, and never sends email.
+"Write an email" / "Reply by email" open a draft in Gmail; you press Send yourself.
 
-You need [Node.js](https://nodejs.org) (version 18 or newer). Then, in this folder:
+## Pages
 
-```bash
-npm install
-npm run dev
+| Page | What it shows |
+|---|---|
+| **Overview** | Number cards, "Needs your attention" (recent replies, follow-ups due, bounces), weekly chart, recent activity |
+| **Pipeline** | Board: Waiting for reply · Following up · Replied · Stopped / no reply |
+| **Replies** | Every reply with its text, plus Open in Gmail / Reply by email |
+| **Follow-ups** | Due now and upcoming automatic follow-ups (last mail + 7 days, 1 or 2 of 2) |
+| **Contacts** | Search, sort, filter by stage and date, Download CSV |
+| **Add & log** | Add a new contact to reach out to, or log outreach already done (LinkedIn, call, meeting…) |
+| **Settings** | Connection status, last sync, Sign out, theme, refresh interval |
+
+Click any contact anywhere to open its side panel (details, next follow-up, reply, Gmail buttons).
+
+## Files
+
+```
+index.html         the page shell
+config.js          API_URL (your Apps Script Web app URL) and options. No secrets.
+css/style.css      all styling (light and dark)
+js/                small scripts: util, api, store, chart, panel, app, pages/*
+apps-script/       the backend: paste into script.google.com (see below)
+  Code.gs          the API code (safe to replace on updates)
+  Settings.gs      template for your sheet ID + token (fill in ONLY in Apps Script)
 ```
 
-Open the address it prints (usually http://localhost:5173).
+## Signing in
 
-## Build it
+The first time you open the site in a browser, type your token. That browser remembers it.
+To share the dashboard, send people the link and (privately) the token. Everyone with the token sees all data.
+To cut off access, change `API_TOKEN` in the Apps Script **Settings** file, then publish a new version
+(Deploy → Manage deployments → ✏ → New version → Deploy). Everyone then has to type the new token.
 
-```bash
-npm run build
-```
+"Try it with sample data" on the sign-in screen shows made-up data, handy for demos.
 
-This creates a `dist/` folder with the finished website. To preview that build locally:
+## Updating the backend
 
-```bash
-npm run preview
-```
+1. Open the **Outreach API** project at script.google.com.
+2. Replace everything in **Code.gs** with `apps-script/Code.gs` from this repo. Leave **Settings** alone.
+3. Deploy → **Manage deployments** → ✏ → Version: **New version** → Deploy. (Not "New deployment": that changes the URL.)
 
-## Put this on GitHub (step by step)
+## Options in config.js
 
-You only do steps 1–3 once.
+- `ENABLE_CALL_WHATSAPP: false`: set to `true` to turn on phone numbers (saved in the browser only),
+  Call / WhatsApp buttons, "Plan a call / Plan WhatsApp" and the Call / WhatsApp pipeline column.
+- `FOLLOWUP_DAYS` / `MAX_FOLLOWUPS`: must match the sheet script (7 and 2).
 
-1. **Install Git**: download it from https://git-scm.com/download/win and install with the default options. Then close and reopen your terminal.
-2. **Tell Git who you are** (use the name and email from your GitHub account):
-   ```bash
-   git config --global user.name "Your Name"
-   git config --global user.email "you@example.com"
-   ```
-3. **Create an empty repository on GitHub**: go to https://github.com/new, name it (for example `opengrad-outreach`), choose Public or Private, and **don't** tick "Add a README". Then click **Create repository**.
-4. **Upload the code**: open a terminal in this folder and run these one at a time. Replace `YOUR-USERNAME` with your GitHub username.
-   ```bash
-   git init
-   git add .
-   git commit -m "OpenGrad Outreach dashboard"
-   git branch -M main
-   git remote add origin https://github.com/YOUR-USERNAME/opengrad-outreach.git
-   git push -u origin main
-   ```
-   The first push opens a browser window asking you to sign in to GitHub. Approve it.
-5. **Refresh the GitHub page**: your code is there. `node_modules` and `dist` are left out on purpose (see `.gitignore`).
+## Adding your partner's Gmail
 
-**Later changes:** after editing, run:
-```bash
-git add .
-git commit -m "Describe what you changed"
-git push
-```
+Add a row for their Gmail in the **Accounts** tab of the master sheet and set it to Active.
+Their mails appear on the dashboard automatically. Nothing changes here.
 
-**On another computer:** download the code and run it:
-```bash
-git clone https://github.com/YOUR-USERNAME/opengrad-outreach.git
-cd opengrad-outreach
-npm install
-npm run dev
-```
+## Hosting
 
-## Deploy on Vercel
+- **GitHub Pages**: pushing to `main` publishes the site via `.github/workflows/deploy.yml`.
+  In the repo: Settings → Pages → Source: **GitHub Actions**.
+- **Netlify / Vercel**: import the repo, no build command, publish directory = the repo root.
 
-1. Push this repo to GitHub.
-2. On [vercel.com](https://vercel.com), click **Add New → Project** and import the repo.
-3. Use these settings (Vercel usually detects them automatically):
-   - Framework preset: **Vite**
-   - Build command: `npm run build`
-   - Output directory: `dist`
-4. Click **Deploy**.
-
-Netlify works the same way: build command `npm run build`, publish directory `dist`.
-
-## Deploy on GitHub Pages
-
-1. Push this repo to GitHub on the `main` branch.
-2. In the repo, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
-3. Every push to `main` now builds and publishes the site automatically. You can also run it by hand from the **Actions** tab ("Deploy to GitHub Pages" → "Run workflow").
-4. The site address appears in **Settings → Pages** after the first run.
-
-## How to connect real data later
-
-Only edit **`src/services/dataSource.js`**. Replace the body of `getOutreachData()` so it loads
-your real data (for example, from a small backend that reads the Google Sheet) and returns:
-
-```js
-{
-  records: [ /* one object per contact, same fields as in src/data/mockData.js */ ],
-  lastSynced: '2026-11-10T09:30:00Z'
-}
-```
-
-Call fields: `callDone` (true/false), `callDate`, `callOutcome` (one of the values in
-`CALL_OUTCOMES` in `src/config/lists.js`, or blank if not written down yet) and `callNotes`.
-
-Dates should be `YYYY-MM-DD` strings. Blank cells can be `""` or `null`. Every number, chart and
-to-do item on the page is worked out from `records` automatically, so nothing else needs to change.
-If you add new dropdown values (for example, a new funding status), add them in `src/config/lists.js`.
+The old React version of this dashboard is kept on the `old-react-dashboard` branch.
