@@ -47,7 +47,7 @@ export function describeDue(info) {
  *   schedules the after-call follow-up.
  * - For everything else: one more follow-up sent today, next step = waiting, next follow-up a few days out.
  */
-export function markFollowUpDone(record, actionType, ref = getToday(), settings = SETTINGS) {
+export function markFollowUpDone(record, actionType, { countFollowUp = true } = {}, ref = getToday(), settings = SETTINGS) {
   if (actionType === 'call') {
     return {
       ...record,
@@ -62,7 +62,7 @@ export function markFollowUpDone(record, actionType, ref = getToday(), settings 
   }
   return {
     ...record,
-    followUpsDone: (record.followUpsDone || 0) + 1,
+    followUpsDone: (record.followUpsDone || 0) + (countFollowUp ? 1 : 0),
     lastOutreachDate: toDateString(ref),
     nextStep: 'Waiting for reply',
     nextFollowUpDate: toDateString(addDays(ref, settings.daysUntilNextFollowUp)),

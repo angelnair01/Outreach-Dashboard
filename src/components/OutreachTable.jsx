@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Search, Users, X } from 'lucide-react';
 import Section from './Section.jsx';
 import { SkeletonRows } from './Skeleton.jsx';
 import EmptyState, { ErrorState } from './EmptyState.jsx';
@@ -97,7 +97,7 @@ function FilterSelect({ id, label, value, onChange, options }) {
   );
 }
 
-export default function OutreachTable({ records, owners, filters, onFiltersChange, loading, error, onRetry }) {
+export default function OutreachTable({ records, owners, filters, onFiltersChange, onEdit, loading, error, onRetry }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: 'nextFollowUpDate', dir: 'asc' });
   const [visible, setVisible] = useState(SETTINGS.tablePageSize);
@@ -148,13 +148,16 @@ export default function OutreachTable({ records, owners, filters, onFiltersChang
       <>
         <p className="mb-2 text-sm text-slate-500 md:hidden">Swipe sideways to see all columns →</p>
         <div className="-mx-5 overflow-x-auto sm:mx-0 sm:rounded-xl sm:ring-1 sm:ring-slate-200" tabIndex={0} role="region" aria-label="Outreach table, scrollable">
-          <table className="w-full min-w-[1180px] text-base">
+          <table className="w-full min-w-[1260px] text-base">
             <caption className="sr-only">All outreach contacts. Column headers are buttons that sort the table.</caption>
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 {COLUMNS.map((c) => (
                   <SortHeader key={c.key} column={c} sort={sort} onSort={onSort} />
                 ))}
+                <th scope="col" className="px-4 py-3">
+                  <span className="sr-only">Edit</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -210,6 +213,17 @@ export default function OutreachTable({ records, owners, filters, onFiltersChang
                       <FundingStatusBadge value={r.fundingStatus} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{displayValue(r.owner)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(r)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50"
+                      >
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                        Edit
+                        <span className="sr-only"> {r.company || r.contactPerson}</span>
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

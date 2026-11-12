@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlarmClock, CalendarClock, Hourglass, Linkedin, Mail, MessageCircleReply, TriangleAlert, Users } from 'lucide-react';
+import { AlarmClock, CalendarClock, CheckCircle2, Hourglass, Info, Linkedin, Mail, MessageCircleReply, TriangleAlert, Users } from 'lucide-react';
+import ContactForm from './components/ContactForm.jsx';
+import ConnectDialog from './components/ConnectDialog.jsx';
 import { useOutreach } from './hooks/useOutreach.js';
 import Header from './components/Header.jsx';
 import StatCard from './components/StatCard.jsx';
@@ -30,7 +32,23 @@ function useNow(intervalMs = 30000) {
 }
 
 export default function App() {
-  const { records, lastSynced, loading, refreshing, error, refresh, markDone } = useOutreach();
+  const {
+    records, lastSynced, mode, loading, refreshing, error, notice, clearNotice,
+    refresh, reload, markDone, addContact, editContact,
+  } = useOutreach();
+  // Add / edit form: null = closed, { record: null } = add, { record } = edit.
+  const [form, setForm] = useState(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const openAdd = () => setForm({ record: null });
+  const openEdit = (record) => setForm({ record });
+  const saveForm = (data) => (form?.record ? editContact(form.record.id, data) : addContact(data));
+
+  // Hide the "saved" / "couldn't save" message after a few seconds.
+  useEffect(() => {
+    if (!notice) return undefined;
+    const id = setTimeout(clearNotice, notice.tone === 'error' ? 8000 : 4000);
+    return () => clearTimeout(id);
+  }, [notice, clearNotice]);
   const now = useNow();
   const dayKey = now.toDateString();
   const today = useMemo(() => startOfDay(new Date(dayKey)), [dayKey]);
@@ -81,9 +99,37 @@ export default function App() {
         Skip to content
       </a>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <Header lastSynced={lastSynced} now={now} onRefresh={refresh} refreshing={refreshing} loading={loading} />
+        <Header
+          lastSynced={lastSynced}
+          now={now}
+          mode={mode}
+          onRefresh={refresh}
+          onAdd={openAdd}
+          onConnect={() => setConnectOpen(true)}
+          refreshing={refreshing}
+          loading={loading}
+        />
 
         <main id="main" className="mt-8 space-y-6 sm:space-y-8">
+          {mode === 'demo' && !loading && (
+            <div className="flex flex-col gap-3 rounded-xl bg-indigo-50 p-4 text-indigo-900 ring-1 ring-indigo-100 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <Info aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+                <p className="text-base">
+                  You’re looking at <strong>demo data</strong>. Connect your Google Sheet to see real outreach,
+                  updated automatically from Gmail. Changes you make now are not saved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConnectOpen(true)}
+                className="shrink-0 self-start rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-indigo-700 shadow-sm ring-1 ring-indigo-200 hover:bg-indigo-50 sm:self-auto"
+              >
+                Connect Google Sheet
+              </button>
+            </div>
+          )}
+
           {error && (
             <div role="alert" className="flex items-start gap-3 rounded-xl bg-rose-50 p-4 text-rose-800 ring-1 ring-rose-200">
               <TriangleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
@@ -122,6 +168,7 @@ export default function App() {
             actionFilter={actionFilter}
             onActionFilterChange={setActionFilter}
             onMarkDone={markDone}
+            onEdit={openEdit}
             {...shared}
           />
 
@@ -140,14 +187,45 @@ export default function App() {
             owners={owners}
             filters={tableFilters}
             onFiltersChange={setTableFilters}
+            onEdit={openEdit}
             {...shared}
           />
         </main>
 
         <footer className="mt-10 text-center text-sm text-slate-500">
-          Demo data only — names, companies and emails are made up.
+          {mode === 'demo'
+            ? 'Demo data only — names, companies and emails are made up.'
+            : `Data from your Google Sheet. Gmail is checked automatically; this page refreshes every ${SETTINGS.autoRefreshMinutes} minutes.`}
         </footer>
       </div>
+
+      <ContactForm
+        open={Boolean(form)}
+        record={form?.record ?? null}
+        owners={owners}
+        onClose={() => setForm(null)}
+        onSave={saveForm}
+      />
+      <ConnectDialog open={connectOpen} onClose={() => setConnectOpen(false)} onChanged={reload} />
+
+      {notice && (
+        <div
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+          className={`fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md items-start gap-3 rounded-xl p-4 shadow-lg ring-1 sm:inset-x-auto sm:right-6 ${
+            notice.tone === 'error' ? 'bg-rose-50 text-rose-800 ring-rose-200' : 'bg-white text-slate-800 ring-slate-200'
+          }`}
+        >
+          {notice.tone === 'error' ? (
+            <TriangleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
+          ) : (
+            <CheckCircle2 aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+          )}
+          <p className="flex-1 text-sm">{notice.text}</p>
+          <button type="button" onClick={clearNotice} className="text-sm font-semibold underline-offset-2 hover:underline">
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }

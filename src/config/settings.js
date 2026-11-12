@@ -15,6 +15,10 @@ export const SETTINGS = {
   // How many weeks to show in the "Outreach per week" chart.
   weeksInChart: 8,
 
+  // Re-read the data automatically this often while the page is open (0 = off).
+  // Gmail itself is checked by the Google Sheet's script every 15 minutes.
+  autoRefreshMinutes: 5,
+
   // Rows shown in the table before "Show more".
   tablePageSize: 10,
 

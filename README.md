@@ -4,12 +4,16 @@ A one-page website that shows how OpenGrad's outreach to funders and partners is
 who we've emailed or messaged on LinkedIn, who replied, which follow-ups are due, and where
 each funder is in the funding pipeline.
 
-> **Right now it uses made-up demo data.** No logins, no Google Sheets, no Gmail, no API keys.
-> All names, companies and emails are fake.
+It works in two modes:
+
+- **Live:** connected to a Google Sheet whose script reads your **Gmail** every 15 minutes, so
+  emails sent, follow-ups and replies update by themselves. You can add and edit contacts from the
+  dashboard and they're saved in the sheet. Setup: **[google-apps-script/SETUP.md](google-apps-script/SETUP.md)** (about 15 minutes, once).
+- **Demo:** until you connect, it shows made-up data (all names, companies and emails are fake).
 
 ## What's on the page
 
-1. **Header**: when the data was last synced, plus a **Refresh** button.
+1. **Header**: live or demo badge, when the data was last synced, and buttons for **Add contact**, **Sync Gmail** and **Connect**. The page also re-reads the data every 5 minutes on its own.
 2. **Key numbers**: contacts, emails sent, LinkedIn outreach, responses, awaiting response, overdue follow-ups, and follow-ups due in the next 7 days.
 3. **What to do next**: a short to-do list worked out from the data. Each item has a button that jumps to the right section.
 4. **Follow-ups**: tabs for Overdue, Today, Next 7 days and Later. Each follow-up says exactly **what to do**:
@@ -19,10 +23,18 @@ each funder is in the funding pipeline.
    - **After a call**: we already had a call, so the row shows how it went (for example *Positive – moving ahead* or *Needs more information*) and what to do now, such as "Email the information they asked for".
 
    You can also filter by type of follow-up (Email / LinkedIn / Set up a call / After a call / Proposal).
-   "Mark sent", "Mark done" and "Call done" update the row. For now this only changes what's on your screen and resets when you refresh.
+   "Mark sent", "Mark done" and "Call done" update the row; **Add call outcome** and **Edit** open the contact form.
+   When connected, every change is saved to the Google Sheet. In demo mode, changes are forgotten when the page reloads.
 5. **Recent replies**: who wrote back, whether they're interested in funding, the funding status, and the call outcome if we've had a call.
 6. **Charts**: the funding pipeline, outreach per week, and a breakdown of what we're reaching out for.
-7. **All outreach**: a searchable, filterable and sortable table of every contact. Rows with missing information get a **Needs details** tag.
+7. **All outreach**: a searchable, filterable and sortable table of every contact, each with an **Edit** button. Rows with missing information get a **Needs details** tag.
+
+## Adding new data
+
+- **Add contact** button: a form with company, contact, email, LinkedIn, outreach dates, next step, reply, interest, funding status, and call details.
+- **Edit** on any contact: change anything, or log a call (date, how it went, notes).
+- **Directly in the Google Sheet**: type a new row in the Contacts tab.
+- **Automatically from Gmail**: add the Gmail label **Outreach** to an email you send, and the recipient is added as a new contact on the next sync.
 
 ## Folder structure
 
@@ -34,17 +46,23 @@ each funder is in the funding pipeline.
 ├── vercel.json                Vercel: send every URL to the app
 ├── public/_redirects          Netlify: same as above
 ├── .github/workflows/deploy.yml   Auto-deploy to GitHub Pages on push to main
+├── google-apps-script/
+│   ├── Code.gs                The Google Sheet script: Gmail sync + the dashboard's data API
+│   └── SETUP.md               Step-by-step setup guide
 └── src/
     ├── App.jsx                Lays out the page, top to bottom
     ├── config/
     │   ├── lists.js           Allowed values (Reaching out for, Next step, Funding status…) and badge colors
     │   └── settings.js        Small knobs: "next 7 days" window, weeks in chart, rows per page…
     ├── data/mockData.js       ~25 fake contacts, with dates relative to today
-    ├── services/dataSource.js The ONLY place data is loaded from (swap this for real data later)
-    ├── hooks/useOutreach.js   Loading, refresh, error and "Mark done"
+    ├── services/
+    │   ├── dataSource.js      The ONLY place data is read and saved (Google Sheet, or demo data)
+    │   └── connection.js      Remembers the sheet's web app URL + access key in this browser
+    ├── hooks/useOutreach.js   Loading, auto-refresh, sync, add, edit and "Mark done"
     ├── utils/                 Pure functions that work out every number, list and chart from the records
     └── components/            Header, StatCard, NextStepsPanel, FollowUpTabs, ResponsesList,
-                               PipelineChart, WeeklyChart, OutreachTable, StatusBadge, Skeleton, EmptyState
+                               PipelineChart, WeeklyChart, OutreachTable, StatusBadge, Skeleton, EmptyState,
+                               ContactForm (add / edit), ConnectDialog, Modal
 ```
 
 ## Run it on your computer
@@ -127,21 +145,17 @@ Netlify works the same way: build command `npm run build`, publish directory `di
 3. Every push to `main` now builds and publishes the site automatically. You can also run it by hand from the **Actions** tab ("Deploy to GitHub Pages" → "Run workflow").
 4. The site address appears in **Settings → Pages** after the first run.
 
-## How to connect real data later
+## Connecting real data
 
-Only edit **`src/services/dataSource.js`**. Replace the body of `getOutreachData()` so it loads
-your real data (for example, from a small backend that reads the Google Sheet) and returns:
+Follow **[google-apps-script/SETUP.md](google-apps-script/SETUP.md)**. In short: create a Google
+Sheet → paste `Code.gs` into Extensions → Apps Script → run **Set up this sheet** and **Turn on
+automatic Gmail sync** → deploy as a web app → click **Connect** on the dashboard and paste the URL
+and access key.
 
-```js
-{
-  records: [ /* one object per contact, same fields as in src/data/mockData.js */ ],
-  lastSynced: '2026-11-10T09:30:00Z'
-}
-```
+**Privacy:** the access key and URL are typed into the dashboard and saved only in that browser.
+They're never in the code, so this repository and the public website contain no real data.
+Anyone who opens the website without the key just sees the demo data.
 
-Call fields: `callDone` (true/false), `callDate`, `callOutcome` (one of the values in
-`CALL_OUTCOMES` in `src/config/lists.js`, or blank if not written down yet) and `callNotes`.
-
-Dates should be `YYYY-MM-DD` strings. Blank cells can be `""` or `null`. Every number, chart and
-to-do item on the page is worked out from `records` automatically, so nothing else needs to change.
-If you add new dropdown values (for example, a new funding status), add them in `src/config/lists.js`.
+If you add new dropdown values (for example, a new funding status), add them in **both**
+`src/config/lists.js` and the `LISTS` section at the top of `google-apps-script/Code.gs`.
+To use a different data source entirely, only `src/services/dataSource.js` needs to change.

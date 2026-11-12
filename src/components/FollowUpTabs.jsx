@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { CalendarCheck, Check } from 'lucide-react';
+import { CalendarCheck, Check, Pencil, PhoneCall } from 'lucide-react';
 import Section from './Section.jsx';
 import { SkeletonRows } from './Skeleton.jsx';
 import EmptyState, { ErrorState } from './EmptyState.jsx';
@@ -49,8 +49,9 @@ function doneLabel(type) {
   return 'Mark done';
 }
 
-function FollowUpRow({ item, tab, onMarkDone }) {
+function FollowUpRow({ item, tab, onMarkDone, onEdit }) {
   const { record, info, action } = item;
+  const needsOutcome = action.type === 'afterCall' && !action.call?.outcome;
   return (
     <li className="flex flex-col gap-3 py-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 space-y-1.5">
@@ -73,15 +74,38 @@ function FollowUpRow({ item, tab, onMarkDone }) {
         <p className={`text-sm ${tab.dueClass}`}>
           <span className="font-semibold">{formatDate(info.dueDate)}</span> · {describeDue(info)}
         </p>
-        <button
-          type="button"
-          onClick={() => onMarkDone(record, action)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-50"
-        >
-          <Check aria-hidden="true" className="h-4 w-4" />
-          {doneLabel(action.type)}
-          <span className="sr-only"> for {record.company}</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(record)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+            Edit
+            <span className="sr-only"> {record.company}</span>
+          </button>
+          {needsOutcome ? (
+            <button
+              type="button"
+              onClick={() => onEdit(record)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+            >
+              <PhoneCall aria-hidden="true" className="h-4 w-4" />
+              Add call outcome
+              <span className="sr-only"> for {record.company}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onMarkDone(record, action)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-50"
+            >
+              <Check aria-hidden="true" className="h-4 w-4" />
+              {doneLabel(action.type)}
+              <span className="sr-only"> for {record.company}</span>
+            </button>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -94,6 +118,7 @@ export default function FollowUpTabs({
   actionFilter,
   onActionFilterChange,
   onMarkDone,
+  onEdit,
   loading,
   error,
   onRetry,
@@ -130,7 +155,7 @@ export default function FollowUpTabs({
     onMarkDone(record.id, action.type);
     setAnnouncement(
       action.type === 'call'
-        ? `Call with ${record.company} marked as done. Remember to write down how it went.`
+        ? `Call with ${record.company} marked as done. Use “Add call outcome” to write down how it went.`
         : `Marked done for ${record.company}. Next follow-up in ${SETTINGS.daysUntilNextFollowUp} days.`
     );
   };
@@ -151,7 +176,7 @@ export default function FollowUpTabs({
     body = (
       <ul className="divide-y divide-slate-100">
         {items.map((item) => (
-          <FollowUpRow key={item.record.id} item={item} tab={active} onMarkDone={handleMarkDone} />
+          <FollowUpRow key={item.record.id} item={item} tab={active} onMarkDone={handleMarkDone} onEdit={onEdit} />
         ))}
       </ul>
     );
