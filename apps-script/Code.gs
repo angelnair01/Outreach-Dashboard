@@ -3,40 +3,38 @@
  *
  * This is a SEPARATE Apps Script project from the hourly follow-up script.
  *  - It only READS the "Follow-up Log" tab (never changes it).
- *  - It can add contacts to a "Leads" tab (people you plan to email). That tab is
- *    created automatically the first time you add someone.
+ *  - It can add contacts to a "Leads" tab (people you plan to email / outreach you logged).
+ *  - Access: "Sign in with Google". Only the script owner and the Gmail addresses listed in the
+ *    "Dashboard Access" tab of the master sheet get any data. That tab is created automatically.
  *  - It stores small "stage" marks (call / whatsapp) in its own Script Properties.
  * It never sends email.
  *
- * Your sheet ID and token live in the separate "Settings" file (Settings.gs),
+ * Your sheet ID and Google Client ID live in the separate "Settings" file (Settings.gs),
  * so this whole file can be replaced on updates.
  */
 
 const LOG_TAB = 'Follow-up Log';
 const LEADS_TAB = 'Leads';
+const ACCESS_TAB = 'Dashboard Access';
 const LEADS_HEADER = ['Lead ID', 'Name', 'Email', 'Organisation', 'Subject', 'Notes', 'Added', 'Status', 'Channel', 'Contacted On'];
 const CHANNELS = ['Email', 'LinkedIn', 'Call', 'WhatsApp', 'In person', 'Other'];
 
 /* ---------- entry points ---------- */
 
-// Reading data (and the simple "mark" action).
-function doGet(e) {
-  const p = (e && e.parameter) || {};
-  if (!authorized_(p.token)) return json_({ error: 'unauthorized' });
-  try {
-    if (p.action === 'mark') return json_(markStage(p.id, p.stage));
-    return json_({ rows: getData(), leads: getLeads() });
-  } catch (err) {
-    return json_({ error: errText_(err) });
-  }
+// Opening the URL in a browser just says the API is running. No data without signing in.
+function doGet() {
+  return json_({ ok: true, message: 'Outreach API is running. Open the dashboard website and sign in with Google.' });
 }
 
-// Changing data: the website sends a small JSON message in the request body.
+// The website sends a small JSON message: { idToken, action, ... }
 function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { return json_({ error: 'bad request' }); }
-  if (!authorized_(body.token)) return json_({ error: 'unauthorized' });
   try {
+    const who = checkUser_(body.idToken);
+    if (who.error) return json_(who);
+
+    if (!body.action || body.action === 'get') return json_({ rows: getData(), leads: getLeads(), user: who.email });
     if (body.action === 'addLead') return json_(addLead(body.lead || {}));
     if (body.action === 'contactedLead') return json_(updateLead(body.id, { status: 'Contacted', channel: body.channel, contactedOn: body.contactedOn }));
     if (body.action === 'removeLead') return json_(updateLead(body.id, { status: 'Removed' }));
@@ -45,6 +43,64 @@ function doPost(e) {
   } catch (err) {
     return json_({ error: errText_(err) });
   }
+}
+
+/* ---------- Google sign-in check ---------- */
+
+// Returns { email } or { error: 'signin' | 'expired' | 'not_allowed', email? }.
+function checkUser_(idToken) {
+  if (typeof GOOGLE_CLIENT_ID !== 'string' || !/apps\.googleusercontent\.com$/.test(GOOGLE_CLIENT_ID)) {
+    throw new Error('GOOGLE_CLIENT_ID is not set in the Settings file.');
+  }
+  idToken = String(idToken || '');
+  if (idToken.split('.').length !== 3) return { error: 'signin' };
+
+  // Google checks the sign-in ticket for us. Results are cached briefly to keep the dashboard fast.
+  const cache = CacheService.getScriptCache();
+  const key = 'id_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken)).slice(0, 40);
+  let info = null;
+  const cached = cache.get(key);
+  if (cached) {
+    info = JSON.parse(cached);
+  } else {
+    const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return { error: 'expired' };
+    info = JSON.parse(res.getContentText());
+  }
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (info.aud !== GOOGLE_CLIENT_ID) return { error: 'signin' };
+  if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') return { error: 'signin' };
+  if (String(info.email_verified) !== 'true') return { error: 'signin' };
+  if (!(Number(info.exp) > nowSec)) return { error: 'expired' };
+  if (!cached) cache.put(key, JSON.stringify(info), Math.max(1, Math.min(600, Number(info.exp) - nowSec)));
+
+  const email = String(info.email || '').toLowerCase();
+  if (allowedEmails_().indexOf(email) < 0) return { error: 'not_allowed', email: email };
+  return { email: email };
+}
+
+// The script owner, plus every email in column A of the "Dashboard Access" tab.
+function allowedEmails_() {
+  const owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  const list = owner ? [owner] : [];
+  const ids = sheetIds_();
+  if (!ids.length) return list;
+  const ss = SpreadsheetApp.openById(ids[0]);
+  let sheet = ss.getSheetByName(ACCESS_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(ACCESS_TAB);
+    sheet.getRange(1, 1, 1, 2).setValues([['Email', 'Name / note']]).setFontWeight('bold');
+    if (owner) sheet.getRange(2, 1, 1, 2).setValues([[owner, 'Owner (always allowed)']]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 4).setValue('Add one Gmail address per row in column A. Only these people can open the dashboard. Delete a row to remove someone.');
+  }
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().forEach(function (r) {
+      const e = String(r[0] || '').trim().toLowerCase();
+      if (/^[^\s@]+@[^\s@]+$/.test(e) && list.indexOf(e) < 0) list.push(e);
+    });
+  }
+  return list;
 }
 
 /* ---------- Follow-up Log (read only) ---------- */
@@ -212,10 +268,6 @@ function leadsSheet_(create) {
     sheet.setFrozenRows(1);
   }
   return sheet;
-}
-
-function authorized_(token) {
-  return typeof API_TOKEN === 'string' && API_TOKEN !== 'CHANGE-THIS' && API_TOKEN.length > 0 && token === API_TOKEN;
 }
 
 function clean_(v, max) {

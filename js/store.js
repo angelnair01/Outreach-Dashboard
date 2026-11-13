@@ -45,7 +45,7 @@
       if (!OG.isDemo()) OG.store.set('og.cache', { rows: rows, leads: d.leads, at: S.lastSync });
     }, function (e) {
       S.error = e.message || String(e);
-      if (e.code === 'unauthorized') OG.signOut(true, S.error);
+      if (e.code === 'expired' || e.code === 'not_allowed') OG.signOut(true, S.error);
       if (opts && opts.throwErrors) throw e;
     }).finally(function () { S.loading = false; emit(); });
     emit();
@@ -70,7 +70,24 @@
       OG.store.set('og.token', token); OG.startPolling();
     }, function (e) { S.token = ''; throw e; });
   };
+  /* A valid Google sign-in ticket (renewed silently when it is about to expire). */
+  var renewing = null;
+  OG.freshToken = function (force) {
+    if (OG.isDemo()) return Promise.resolve(S.token);
+    if (!force && S.token && OG.auth.secondsLeft(S.token) > 120) return Promise.resolve(S.token);
+    if (!renewing) {
+      renewing = OG.auth.renew().then(function (t) {
+        S.token = t; OG.store.set('og.token', t); renewing = null; return t;
+      }, function (e) {
+        renewing = null; var err = new Error('Please sign in again.'); err.code = 'expired'; throw err;
+      });
+    }
+    return renewing;
+  };
+  OG.userEmail = function () { var p = OG.auth.decode(S.token); return (p && p.email) || ''; };
+
   OG.signOut = function (silent, msg) {
+    if (!silent) OG.auth.signOut();
     S.token = ''; S.rows = []; S.leads = []; S.lastSync = 0;
     OG.store.del('og.token'); OG.store.del('og.cache');
     clearInterval(timer);

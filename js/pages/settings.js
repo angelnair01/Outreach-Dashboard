@@ -19,12 +19,13 @@
         '<div class="grid settings">' +
           '<section class="card"><h2>Connection</h2>' +
             '<p>' + status + '</p>' +
-            (OG.isDemo() ? '<p class="muted">You are looking at <strong>sample data</strong>, not your sheet.</p>' : '') +
+            (OG.isDemo() ? '<p class="muted">You are looking at <strong>sample data</strong>, not your sheet.</p>'
+              : '<p class="muted">Signed in as <strong>' + OG.esc(OG.userEmail()) + '</strong></p>') +
             '<p class="muted">Last sync: ' + (S.lastSync ? OG.fmtDateTime(S.lastSync) + ' (' + OG.fmtRel(S.lastSync) + ')' : 'never') + '<br>' +
             OG.state.rows.length + ' rows loaded</p>' +
             '<div class="btn-row"><button class="btn" id="s-refresh">' + OG.icon('refresh') + 'Refresh now</button>' +
             '<button class="btn" id="s-signout">Sign out</button></div>' +
-            '<p class="small muted" style="margin-top:10px">Sign out removes your token and the saved copy of the data from this browser. Phone numbers and notes you typed stay.</p>' +
+            '<p class="small muted" style="margin-top:10px">Sign out removes your sign-in and the saved copy of the data from this browser. Phone numbers and notes you typed stay.</p>' +
           '</section>' +
           '<section class="card"><h2>Theme</h2><div class="seg">' +
             seg('theme', 'light', theme, 'Light') + seg('theme', 'dark', theme, 'Dark') + seg('theme', 'system', theme, 'System') + '</div>' +
@@ -32,8 +33,12 @@
             seg('int', 1, S.interval, '1 min') + seg('int', 2, S.interval, '2 min') + seg('int', 5, S.interval, '5 min') + seg('int', 15, S.interval, '15 min') + seg('int', 0, S.interval, 'Off') + '</div>' +
             '<p class="small muted" style="margin-top:10px">The website re-reads your sheet this often while it is open. Your sheet script itself runs once an hour, so new follow-ups and replies appear within about an hour.</p>' +
           '</section>' +
-          '<section class="card"><h2>Adding another Gmail account</h2>' +
-            '<p>To track a partner\'s outreach too (for example Sebin), open your master Google Sheet, go to the <strong>Accounts</strong> tab and add a row with their Gmail address, name, and <em>Active</em>.</p>' +
+          '<section class="card"><h2>Who can open this dashboard</h2>' +
+            '<p>Only Google accounts listed in the <strong>Dashboard Access</strong> tab of your master sheet (one Gmail per row in column A), plus the sheet script\'s owner.</p>' +
+            '<p class="muted">To give someone access, add their Gmail there. To remove them, delete the row. Changes work right away.</p>' +
+          '</section>' +
+          '<section class="card"><h2>Tracking another Gmail account</h2>' +
+            '<p>To track a partner\'s outreach too (for example Sebin): add their Gmail in the <strong>Accounts</strong> tab (Active), and have them switch on the hourly sheet script for their own Gmail.</p>' +
             '<p class="muted">Their mails then appear here automatically. Nothing needs to change on this website.</p>' +
           '</section>' +
         '</div>';
