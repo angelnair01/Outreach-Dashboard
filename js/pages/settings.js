@@ -15,7 +15,7 @@
         : S.loading ? '<span class="pill st-waiting">Syncing…</span>'
         : '<span class="pill st-replied">Connected</span>';
 
-      el.innerHTML = '<div class="page-head"><div><h1>Settings</h1><p class="muted">Connection, look and refresh.</p></div></div>' +
+      el.innerHTML = '<div class="page-head"><div><h1>Settings</h1><p class="muted">Your account, sync and look.</p></div></div>' +
         '<div class="grid settings">' +
           '<section class="card"><h2>Connection</h2>' +
             '<p>' + status + '</p>' +
@@ -29,13 +29,14 @@
           '</section>' +
           '<section class="card"><h2>Theme</h2><div class="seg">' +
             seg('theme', 'light', theme, 'Light') + seg('theme', 'dark', theme, 'Dark') + seg('theme', 'system', theme, 'System') + '</div>' +
-            '<h2 style="margin-top:20px">Refresh every</h2><div class="seg">' +
-            seg('int', 1, S.interval, '1 min') + seg('int', 2, S.interval, '2 min') + seg('int', 5, S.interval, '5 min') + seg('int', 15, S.interval, '15 min') + seg('int', 0, S.interval, 'Off') + '</div>' +
-            '<p class="small muted" style="margin-top:10px">The website re-reads your sheet this often while it is open. Your sheet script itself runs once an hour, so new follow-ups and replies appear within about an hour.</p>' +
+          '</section>' +
+          '<section class="card"><h2>Live sync</h2>' +
+            '<p><span class="pill st-replied">Live</span> While this page is open it checks your sheet every ' + OG.LIVE_SECONDS + ' seconds, and right away when you come back to the tab.</p>' +
+            '<p class="small muted">New mails, replies and follow-ups reach the sheet when your sheet script runs (set its trigger to every 5 minutes for near real time). They then show here within about ' + OG.LIVE_SECONDS + ' seconds.</p>' +
           '</section>' +
           '<section class="card"><h2>Who can open this dashboard</h2>' +
-            '<p>Only Google accounts listed in the <strong>Dashboard Access</strong> tab of your master sheet (one Gmail per row in column A), plus the sheet script\'s owner.</p>' +
-            '<p class="muted">To give someone access, add their Gmail there. To remove them, delete the row. Changes work right away.</p>' +
+            '<p>Only Google accounts listed in the <strong>Dashboard Access</strong> tab of the master sheet (one Gmail per row in column A), plus the sheet owner.</p>' +
+            '<p class="muted">Everyone sees <strong>only their own</strong> outreach: mails from their Gmail (the "Sent by" column of the Follow-up Log) and contacts they added. To give someone access, add their Gmail there; to remove them, delete the row.</p>' +
           '</section>' +
           '<section class="card"><h2>Tracking another Gmail account</h2>' +
             '<p>To track a partner\'s outreach too (for example Sebin): add their Gmail in the <strong>Accounts</strong> tab (Active), and have them switch on the hourly sheet script for their own Gmail.</p>' +
@@ -47,9 +48,6 @@
       el.querySelector('#s-signout').onclick = function () { if (confirm('Sign out of the dashboard on this browser?')) OG.signOut(); };
       el.querySelectorAll('[data-theme]').forEach(function (b) {
         b.onclick = function () { var t = b.getAttribute('data-theme'); OG.store.set('og.theme', t); OG.applyTheme(t); OG.pages.settings.render(el); };
-      });
-      el.querySelectorAll('[data-int]').forEach(function (b) {
-        b.onclick = function () { OG.setInterval(+b.getAttribute('data-int')); OG.pages.settings.render(el); };
       });
     }
   };

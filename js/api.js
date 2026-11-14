@@ -44,6 +44,10 @@
       return post(t, body).catch(function (e) {
         if (e.code !== 'expired') throw e;
         return OG.freshToken(true).then(function (t2) { return post(t2, body); });
+      }).then(function (res) {
+        // After a change, re-read soon so every page shows the saved state.
+        if (body.action !== 'get') setTimeout(function () { OG.refresh({ quiet: true }); }, 1500);
+        return res;
       });
     });
   }

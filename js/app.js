@@ -68,7 +68,7 @@
     }).join('');
     var dot = S.error ? 'err' : S.loading ? 'busy' : '';
     $('sync-status').innerHTML = '<span class="dot ' + dot + '"></span>' +
-      (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
+      (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Live · updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
       (OG.isDemo() ? '<br>Sample data' : '');
   }
 
@@ -106,8 +106,11 @@
   $('scrim').addEventListener('click', OG.closePanel);
   window.addEventListener('hashchange', function () { OG.closePanel(); render(true); });
 
-  OG.onChange(function () { render(false); });
-  setInterval(function () { if (S.token) renderNav(); }, 30000); // keep "Updated x min ago" fresh
+  OG.onChange(function (info) {
+    if (info && info.navOnly) { if (S.token && !$('app').hidden) renderNav(); return; }
+    render(false);
+  });
+  setInterval(function () { if (S.token && !$('app').hidden) renderNav(); }, 15000); // keep "updated x ago" fresh
 
   /* ---------- start ---------- */
   OG.applyTheme(OG.store.get('og.theme', 'system'));
