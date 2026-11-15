@@ -10,13 +10,15 @@
     leads: [],
     lastSync: 0,
     loading: false,
-    error: '',
-    interval: OG.store.get('og.interval', 2) // minutes; 0 = manual only
+    error: ''
   });
+  /* Live sync: how often the open dashboard re-checks the sheet (seconds). */
+  var LIVE_SECONDS = Math.max(15, (window.APP_CONFIG || {}).LIVE_SECONDS || 30);
+  OG.LIVE_SECONDS = LIVE_SECONDS;
 
   OG.isDemo = function () { return S.token === OG.DEMO_TOKEN; };
   OG.onChange = function (fn) { listeners.push(fn); };
-  function emit() { listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }
+  function emit(info) { listeners.forEach(function (fn) { try { fn(info || {}); } catch (e) { console.error(e); } }); }
   OG.emit = emit;
 
   /* With Call / WhatsApp switched off, any old "call"/"whatsapp" mark just counts as Replied. */
@@ -27,50 +29,79 @@
 
   OG.byId = function (id) { return S.rows.find(function (r) { return r.id === id; }); };
 
-  /* Load cached rows so the page shows something instantly while it refreshes. */
+  /* Cached copy (this browser only, for the same signed-in person) so pages show instantly. */
   OG.loadCache = function () {
     if (!S.token || OG.isDemo()) return;
     var c = OG.store.get('og.cache', null);
-    if (c && Array.isArray(c.rows)) { S.rows = normalize(c.rows); S.leads = c.leads || []; S.lastSync = c.at || 0; }
+    if (c && Array.isArray(c.rows) && c.user === OG.userEmail()) {
+      S.rows = normalize(c.rows); S.leads = c.leads || []; S.lastSync = c.at || 0; lastSig = c.sig || '';
+    }
   };
 
+  var lastSig = '';
+  /* opts.quiet: background check, no "Syncing…" flicker, and pages only redraw if something changed. */
   OG.refresh = function (opts) {
+    opts = opts || {};
     if (!S.token) return Promise.resolve();
     if (S.loading) return S.loading;
-    S.error = '';
-    emit();
+    if (!opts.quiet) { S.error = ''; }
     S.loading = OG.api.fetchAll(S.token).then(function (d) {
-      var rows = d.rows; S.leads = d.leads;
-      S.rows = normalize(rows); S.lastSync = Date.now(); S.error = '';
-      if (!OG.isDemo()) OG.store.set('og.cache', { rows: rows, leads: d.leads, at: S.lastSync });
+      var sig = JSON.stringify([d.rows, d.leads]);
+      var changed = sig !== lastSig || !!S.error;
+      lastSig = sig;
+      S.lastSync = Date.now(); S.error = '';
+      if (changed) {
+        S.leads = d.leads; S.rows = normalize(d.rows);
+        if (!OG.isDemo()) OG.store.set('og.cache', { rows: d.rows, leads: d.leads, at: S.lastSync, user: OG.userEmail(), sig: sig });
+      }
+      return changed;
     }, function (e) {
       S.error = e.message || String(e);
-      if (e.code === 'unauthorized') OG.signOut(true, S.error);
-      if (opts && opts.throwErrors) throw e;
-    }).finally(function () { S.loading = false; emit(); });
-    emit();
+      if (e.code === 'expired' || e.code === 'not_allowed') OG.signOut(true, S.error);
+      if (opts.throwErrors) throw e;
+      return true;
+    }).then(function (changed) {
+      S.loading = false; emit(changed ? {} : { navOnly: true });
+    }, function (e) { S.loading = false; emit(); throw e; });
+    if (!opts.quiet) emit({ navOnly: true });
     return S.loading;
   };
 
-  OG.setInterval = function (min) {
-    S.interval = min; OG.store.set('og.interval', min); OG.startPolling();
-  };
   OG.startPolling = function () {
     clearInterval(timer);
-    if (S.interval > 0) timer = setInterval(function () { if (!document.hidden) OG.refresh(); }, S.interval * 60000);
+    timer = setInterval(function () { if (!document.hidden && navigator.onLine !== false) OG.refresh({ quiet: true }); }, LIVE_SECONDS * 1000);
   };
+  // Coming back to the tab, or back online: check right away.
   document.addEventListener('visibilitychange', function () {
-    // Coming back to the tab after a while: refresh right away.
-    if (!document.hidden && S.token && Date.now() - S.lastSync > 60000) OG.refresh();
+    if (!document.hidden && S.token && Date.now() - S.lastSync > 5000) OG.refresh({ quiet: true });
   });
+  window.addEventListener('online', function () { if (S.token) OG.refresh({ quiet: true }); });
+  window.addEventListener('focus', function () { if (S.token && Date.now() - S.lastSync > 10000) OG.refresh({ quiet: true }); });
 
   OG.signIn = function (token) {
-    S.token = token;
+    S.token = token; lastSig = '';
     return OG.refresh({ throwErrors: true }).then(function () {
       OG.store.set('og.token', token); OG.startPolling();
     }, function (e) { S.token = ''; throw e; });
   };
+  /* A valid Google sign-in ticket (renewed silently when it is about to expire). */
+  var renewing = null;
+  OG.freshToken = function (force) {
+    if (OG.isDemo()) return Promise.resolve(S.token);
+    if (!force && S.token && OG.auth.secondsLeft(S.token) > 120) return Promise.resolve(S.token);
+    if (!renewing) {
+      renewing = OG.auth.renew().then(function (t) {
+        S.token = t; OG.store.set('og.token', t); renewing = null; return t;
+      }, function (e) {
+        renewing = null; var err = new Error('Please sign in again.'); err.code = 'expired'; throw err;
+      });
+    }
+    return renewing;
+  };
+  OG.userEmail = function () { var p = OG.auth.decode(S.token); return (p && p.email) || ''; };
+
   OG.signOut = function (silent, msg) {
+    if (!silent) OG.auth.signOut();
     S.token = ''; S.rows = []; S.leads = []; S.lastSync = 0;
     OG.store.del('og.token'); OG.store.del('og.cache');
     clearInterval(timer);

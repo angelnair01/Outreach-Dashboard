@@ -4,30 +4,29 @@
   var DEMO = '__demo__';
   OG.DEMO_TOKEN = DEMO;
 
-  /* GET for reading; POST (with a plain-text JSON body) for anything that changes data,
-     so names and emails never appear in web addresses. Neither sends custom headers,
-     which is what lets Google's server answer a website on another domain. */
-  function call(token, params, body) {
+  /* Every request is a POST with a plain-text JSON body { idToken, action, ... }, so nothing
+     personal appears in web addresses. No custom headers, which is what lets Google's server
+     answer a website on another domain. */
+  function post(idToken, body) {
     var url = (window.APP_CONFIG || {}).API_URL || '';
     if (!url || /PASTE/.test(url)) return Promise.reject(new Error('The website has no API address yet (config.js).'));
     var ctrl = window.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 30000);
-    var req;
-    if (body) {
-      req = fetch(url, { method: 'POST', redirect: 'follow', signal: ctrl && ctrl.signal,
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ token: token }, body)) });
-    } else {
-      var q = new URLSearchParams(Object.assign({ token: token, _: Date.now() }, params || {}));
-      req = fetch(url + (url.indexOf('?') < 0 ? '?' : '&') + q.toString(), { method: 'GET', redirect: 'follow', signal: ctrl && ctrl.signal });
-    }
-    return req
+    return fetch(url, { method: 'POST', redirect: 'follow', signal: ctrl && ctrl.signal,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ idToken: idToken }, body)) })
       .then(function (res) { return res.text(); })
       .then(function (text) {
-        var data;
+        var data, err;
         try { data = JSON.parse(text); } catch (e) {
           throw new Error('Google sent back a web page instead of data. In Apps Script, check that "Who has access" is "Anyone".');
         }
-        if (data && data.error === 'unauthorized') { var err = new Error('That token is not correct.'); err.code = 'unauthorized'; throw err; }
+        if (data && (data.error === 'signin' || data.error === 'expired')) {
+          err = new Error('Please sign in again.'); err.code = 'expired'; throw err;
+        }
+        if (data && data.error === 'not_allowed') {
+          err = new Error((data.email || 'This Google account') + ' is not on the access list. Ask the owner to add it to the "Dashboard Access" tab of the sheet.');
+          err.code = 'not_allowed'; throw err;
+        }
         if (data && data.error) throw new Error('The script reported a problem: ' + data.error);
         return data;
       })
@@ -37,6 +36,20 @@
         throw e;
       })
       .finally(function () { clearTimeout(timer); });
+  }
+
+  /* Use a fresh sign-in ticket; if the server still says it expired, renew once and retry. */
+  function call(_token, _params, body) {
+    return OG.freshToken().then(function (t) {
+      return post(t, body).catch(function (e) {
+        if (e.code !== 'expired') throw e;
+        return OG.freshToken(true).then(function (t2) { return post(t2, body); });
+      }).then(function (res) {
+        // After a change, re-read soon so every page shows the saved state.
+        if (body.action !== 'get') setTimeout(function () { OG.refresh({ quiet: true }); }, 1500);
+        return res;
+      });
+    });
   }
 
   var later = function (v, ms) { return new Promise(function (ok) { setTimeout(function () { ok(v); }, ms || 250); }); };
@@ -49,7 +62,7 @@
         if (!OG._demo) { OG._demo = OG.demoRows(); OG._demoLeads = OG.demoLeads(); }
         return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads) }, 300);
       }
-      return call(token).then(function (d) {
+      return call(token, null, { action: 'get' }).then(function (d) {
         return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [] };
       });
     },

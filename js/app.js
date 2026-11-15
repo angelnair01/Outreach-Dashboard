@@ -23,30 +23,34 @@
     $('app').hidden = true; $('signin').hidden = false;
     var msg = OG._signOutMsg; OG._signOutMsg = '';
     $('signin').innerHTML = '<div class="card"><div class="brand" style="padding:0"><span class="brand-mark"></span>' + OG.esc((window.APP_CONFIG || {}).APP_NAME || 'Outreach') + '</div>' +
-      '<p class="muted" style="margin-top:12px">Type your private token to open the dashboard. This browser will remember it, so you only do this once.</p>' +
-      '<form id="si-form"><div class="field"><label for="si-token">Token</label>' +
-      '<input class="input" id="si-token" type="password" autocomplete="current-password" required spellcheck="false"></div>' +
-      '<label class="small muted"><input type="checkbox" id="si-show"> Show token</label>' +
+      '<p class="muted" style="margin-top:12px">Sign in with your Gmail to see your own outreach, replies and follow-ups.</p>' +
+      '<div id="si-google" style="margin:18px 0 6px;min-height:44px"></div>' +
+      '<div class="small muted" id="si-status" aria-live="polite"></div>' +
       '<div class="error" id="si-err" role="alert">' + OG.esc(msg) + '</div>' +
-      '<button class="btn primary" type="submit" id="si-go">Open dashboard</button></form>' +
-      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" id="si-demo">Try it with sample data</a></p></div>';
-    $('si-show').onchange = function () { $('si-token').type = this.checked ? 'text' : 'password'; };
-    $('si-form').onsubmit = function (e) {
-      e.preventDefault();
-      var t = $('si-token').value.trim(); if (!t) return;
-      $('si-go').disabled = true; $('si-go').textContent = 'Checking…'; $('si-err').textContent = '';
-      signingIn = true;
-      OG.signIn(t).then(function () { signingIn = false; showApp(); }, function (err) {
-        signingIn = false;
-        $('si-go').disabled = false; $('si-go').textContent = 'Open dashboard';
-        $('si-err').textContent = err.message + (err.code === 'unauthorized' ? ' Check for typos or extra spaces.' : '');
-      });
-    };
+      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" id="si-demo">Try it with sample data</a> · <a href="privacy.html">Privacy</a></p></div>';
+
     $('si-demo').onclick = function (e) {
       e.preventDefault(); signingIn = true;
       OG.signIn(OG.DEMO_TOKEN).then(function () { signingIn = false; showApp(); });
     };
-    setTimeout(function () { $('si-token').focus(); }, 30);
+
+    if (!OG.auth.configured()) {
+      $('si-err').textContent = 'Google sign-in is not set up yet (GOOGLE_CLIENT_ID in config.js).';
+      return;
+    }
+    OG.auth.init(function (credential) {
+      if (signingIn) return;
+      signingIn = true;
+      $('si-err').textContent = ''; $('si-status').textContent = 'Checking access…';
+      OG.signIn(credential).then(function () { signingIn = false; showApp(); }, function (err) {
+        signingIn = false; $('si-status').textContent = '';
+        $('si-err').textContent = err.message;
+        OG.auth.signOut();
+      });
+    }).then(function () {
+      OG.auth.renderButton($('si-google'));
+      if (!msg) { try { google.accounts.id.prompt(); } catch (e) {} } // returning users: signs in by itself
+    }, function (e) { $('si-err').textContent = e.message; });
   }
 
   /* ---------- main app ---------- */
@@ -64,7 +68,7 @@
     }).join('');
     var dot = S.error ? 'err' : S.loading ? 'busy' : '';
     $('sync-status').innerHTML = '<span class="dot ' + dot + '"></span>' +
-      (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
+      (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Live · updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
       (OG.isDemo() ? '<br>Sample data' : '');
   }
 
@@ -102,12 +106,17 @@
   $('scrim').addEventListener('click', OG.closePanel);
   window.addEventListener('hashchange', function () { OG.closePanel(); render(true); });
 
-  OG.onChange(function () { render(false); });
-  setInterval(function () { if (S.token) renderNav(); }, 30000); // keep "Updated x min ago" fresh
+  OG.onChange(function (info) {
+    if (info && info.navOnly) { if (S.token && !$('app').hidden) renderNav(); return; }
+    render(false);
+  });
+  setInterval(function () { if (S.token && !$('app').hidden) renderNav(); }, 15000); // keep "updated x ago" fresh
 
   /* ---------- start ---------- */
   OG.applyTheme(OG.store.get('og.theme', 'system'));
   $('brand-name').textContent = (window.APP_CONFIG || {}).APP_NAME || 'Outreach';
+  // Old-style tokens from before Google sign-in are dropped.
+  if (S.token && !OG.isDemo() && !OG.auth.decode(S.token)) OG.signOut(true);
   if (S.token) {
     OG.loadCache(); showApp(); OG.refresh(); OG.startPolling();
   } else {
