@@ -70,6 +70,7 @@
     $('sync-status').innerHTML = '<span class="dot ' + dot + '"></span>' +
       (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Live · updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
       (OG.isDemo() ? '<br>Sample data' : '');
+    renderBanner();
   }
 
   function render(pageChanged) {
@@ -89,9 +90,15 @@
     } else if (!main.contains(document.activeElement) || document.activeElement === main) {
       var y = window.scrollY; page.render($('page')); window.scrollTo(0, y);
     }
-    $('banner').innerHTML = OG.isDemo() ? '<div class="demo-banner">You are viewing <strong>made-up sample data</strong>. Sign out in Settings to use your real token.</div>'
-      : (S.error ? '<div class="demo-banner">⚠️ ' + OG.esc(S.error) + ' Showing the last data we received.</div>' : '');
+    renderBanner();
     OG.refreshPanel();
+  }
+
+  // Top strip on every page: Gmail status + Sync button (and sample-data / error notes).
+  function renderBanner() {
+    var b = $('banner'); if (!b) return;
+    b.innerHTML = (OG.isDemo() ? '<div class="demo-banner">You are viewing <strong>made-up sample data</strong>. Sign out in Settings to use your own Gmail.</div>'
+      : (S.error ? '<div class="demo-banner">⚠️ ' + OG.esc(S.error) + ' Showing the last data we received.</div>' : '')) + OG.gmail.barHtml();
   }
 
   /* ---------- clicks anywhere ---------- */

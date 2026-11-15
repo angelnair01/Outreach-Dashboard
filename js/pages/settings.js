@@ -30,17 +30,23 @@
           '<section class="card"><h2>Theme</h2><div class="seg">' +
             seg('theme', 'light', theme, 'Light') + seg('theme', 'dark', theme, 'Dark') + seg('theme', 'system', theme, 'System') + '</div>' +
           '</section>' +
+          '<section class="card"><h2>Your Gmail</h2>' +
+            (OG.gmail.connected()
+              ? '<p><span class="pill st-replied">Connected</span> Your mails labelled <strong>Outreach</strong> are checked every minute' +
+                (OG.gmail.lastChecked() ? ' (last: ' + OG.fmtRel(OG.gmail.lastChecked()) + ')' : '') + '.</p>' +
+                '<div class="btn-row"><button class="btn" data-gmail="sync">' + OG.icon('refresh') + 'Sync now</button>' +
+                '<button class="btn ghost" data-gmail="connect">Manage / disconnect</button></div>'
+              : '<p><span class="pill st-stopped">Not connected</span> Connect once so your outreach shows up here.</p>' +
+                '<button class="btn primary" data-gmail="connect">' + OG.icon('mail') + 'Connect my Gmail</button>') +
+            '<p class="small muted" style="margin-top:10px">Connecting gives the Outreach Sync script permission to read your Outreach mails and send your follow-ups. Your data is only shown to you.</p>' +
+          '</section>' +
           '<section class="card"><h2>Live sync</h2>' +
-            '<p><span class="pill st-replied">Live</span> While this page is open it checks your sheet every ' + OG.LIVE_SECONDS + ' seconds, and right away when you come back to the tab.</p>' +
-            '<p class="small muted">New mails, replies and follow-ups reach the sheet when your sheet script runs (set its trigger to every 5 minutes for near real time). They then show here within about ' + OG.LIVE_SECONDS + ' seconds.</p>' +
+            '<p><span class="pill st-replied">Live</span> Your Gmail is checked every minute, and this page refreshes every ' + OG.LIVE_SECONDS + ' seconds. New mails usually show within about a minute.</p>' +
+            '<p class="small muted">In a hurry? Click <strong>Sync</strong> (top right of every page) and new mails or replies show within about 10 seconds.</p>' +
           '</section>' +
           '<section class="card"><h2>Who sees what</h2>' +
-            '<p>Anyone can sign in with their own Gmail. Each person sees <strong>only their own</strong> outreach: mails sent from their Gmail (the "Sent by" column of the Follow-up Log) and contacts they added here.</p>' +
-            '<p class="muted">For someone\'s mails to appear, their Gmail must be connected to the sheet script (Accounts tab, see below).</p>' +
-          '</section>' +
-          '<section class="card"><h2>Tracking another Gmail account</h2>' +
-            '<p>To track a partner\'s outreach too (for example Sebin): add their Gmail in the <strong>Accounts</strong> tab (Active), and have them switch on the hourly sheet script for their own Gmail.</p>' +
-            '<p class="muted">Their mails then appear here automatically. Nothing needs to change on this website.</p>' +
+            '<p>Anyone can sign in with their own Gmail. Each person sees <strong>only their own</strong> outreach: mails from their Gmail and contacts they added here.</p>' +
+            '<p class="muted">Everything is stored in one master sheet; only the sheet owner can open it.</p>' +
           '</section>' +
         '</div>';
 

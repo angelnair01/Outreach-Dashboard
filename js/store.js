@@ -13,7 +13,7 @@
     error: ''
   });
   /* Live sync: how often the open dashboard re-checks the sheet (seconds). */
-  var LIVE_SECONDS = Math.max(15, (window.APP_CONFIG || {}).LIVE_SECONDS || 30);
+  var LIVE_SECONDS = Math.max(10, (window.APP_CONFIG || {}).LIVE_SECONDS || 10);
   OG.LIVE_SECONDS = LIVE_SECONDS;
 
   OG.isDemo = function () { return S.token === OG.DEMO_TOKEN; };
@@ -49,7 +49,7 @@
       var sig = JSON.stringify([d.rows, d.leads]);
       var changed = sig !== lastSig || !!S.error;
       lastSig = sig;
-      S.lastSync = Date.now(); S.error = '';
+      S.lastSync = Date.now(); S.error = ''; S.account = d.account || null;
       if (changed) {
         S.leads = d.leads; S.rows = normalize(d.rows);
         if (!OG.isDemo()) OG.store.set('og.cache', { rows: d.rows, leads: d.leads, at: S.lastSync, user: OG.userEmail(), sig: sig });

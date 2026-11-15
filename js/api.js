@@ -60,10 +60,10 @@
     fetchAll: function (token) {
       if (token === DEMO) {
         if (!OG._demo) { OG._demo = OG.demoRows(); OG._demoLeads = OG.demoLeads(); }
-        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads) }, 300);
+        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
       }
       return call(token, null, { action: 'get' }).then(function (d) {
-        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [] };
+        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], account: d.account || null };
       });
     },
     addLead: function (token, lead) {

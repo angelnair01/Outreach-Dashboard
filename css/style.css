@@ -278,3 +278,9 @@ tbody tr.static { cursor: default; }
 tbody tr.static:hover { background: none; }
 #lead-form .seg { display: flex; flex-wrap: wrap; }
 #lead-form .seg button { flex: 1 1 auto; }
+
+/* ===== Gmail strip + Sync button ===== */
+.gmail-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: -8px 0 12px; flex-wrap: wrap; }
+.gmail-bar.warn { justify-content: space-between; background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; margin: 0 0 16px; }
+.gmail-bar .btn[disabled] svg { animation: og-spin 1s linear infinite; }
+@keyframes og-spin { to { transform: rotate(360deg); } }

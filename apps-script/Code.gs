@@ -33,12 +33,24 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { return json_({ error: 'bad request' }); }
   try {
+    // Calls from the "Outreach Sync" script, running as each person with their own Gmail permission.
+    if (/^sync/.test(String(body.action || ''))) {
+      const syncer = checkAccessToken_(body.accessToken);
+      if (syncer.error) return json_(syncer);
+      if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email), account: accountInfo_(syncer.email) });
+      if (body.action === 'syncPush') return json_(syncPush_(syncer.email, body.rows || []));
+      if (body.action === 'syncConnect') return json_(setAccount_(syncer.email, true, body.name));
+      if (body.action === 'syncDisconnect') return json_(setAccount_(syncer.email, false));
+      return json_({ error: 'unknown action' });
+    }
+
     const who = checkUser_(body.idToken);
     if (who.error) return json_(who);
 
     // Everything below only ever sees / changes the signed-in person's own rows.
     const me = who.email;
-    if (!body.action || body.action === 'get') return json_({ rows: getData(me), leads: getLeads(me), user: me });
+    if (!body.action || body.action === 'get') return json_({ rows: getData(me), leads: getLeads(me), user: me, account: accountInfo_(me) });
+    if (body.action === 'gmailStatus') return json_({ account: accountInfo_(me) });
     if (body.action === 'addLead') return json_(addLead(body.lead || {}, me));
     if (body.action === 'contactedLead') return json_(updateLead(body.id, { status: 'Contacted', channel: body.channel, contactedOn: body.contactedOn }, me));
     if (body.action === 'removeLead') return json_(updateLead(body.id, { status: 'Removed' }, me));
@@ -267,6 +279,140 @@ function parseDay_(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
   const d = m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : new Date();
   return isNaN(d.getTime()) ? new Date() : d;
+}
+
+/* ---------- Gmail sync (data sent in by each person's "Outreach Sync") ---------- */
+// Columns A-J of the Follow-up Log. "Sent by" (J) is always set here to the verified Gmail.
+const LOG_HEADER = ['Thread ID', 'Contact', 'Email', 'Subject', 'First Sent', 'Follow-ups Sent', 'Status', 'Last Action', 'Reply Snippet', 'Sent by'];
+const ACCOUNTS_HEADER = ['Gmail address', 'Name to sign with', 'Active (Yes/No)'];
+
+// A Google access token from the sync script proves which Gmail is calling.
+function checkAccessToken_(token) {
+  token = String(token || '');
+  if (token.length < 20) return { error: 'signin' };
+  const cache = CacheService.getScriptCache();
+  const key = 'at_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token)).slice(0, 40);
+  const hit = cache.get(key);
+  if (hit) return { email: hit };
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { error: 'expired' };
+  const info = JSON.parse(res.getContentText());
+  const email = String(info.email || '').toLowerCase();
+  if (!email || String(info.email_verified) !== 'true' || !(Number(info.expires_in) > 0)) return { error: 'signin' };
+  cache.put(key, email, Math.max(1, Math.min(600, Number(info.expires_in))));
+  return { email: email };
+}
+
+function masterSheet_() {
+  const ids = sheetIds_();
+  if (!ids.length) throw new Error('No sheet ID set in Settings.');
+  return SpreadsheetApp.openById(ids[0]); // the first sheet ID is the master: all new data goes there
+}
+
+function logTab_() {
+  const ss = masterSheet_();
+  let sh = ss.getSheetByName(LOG_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(LOG_TAB);
+    sh.getRange(1, 1, 1, LOG_HEADER.length).setValues([LOG_HEADER]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  } else if (String(sh.getRange(1, 10).getValue()).trim() !== 'Sent by') {
+    sh.getRange(1, 10).setValue('Sent by').setFontWeight('bold');
+  }
+  return sh;
+}
+
+// This person's rows (and older rows with no sender, which may be theirs) as plain values.
+function syncPull_(me) {
+  const sh = logTab_();
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return [];
+  return sh.getRange(2, 1, n, LOG_HEADER.length).getValues().filter(function (r) {
+    const by = String(r[9] || '').trim().toLowerCase();
+    return String(r[0] || '').trim() && (by === me || !by);
+  }).map(function (r) {
+    return r.map(function (v) { return v instanceof Date ? v.getTime() : v; });
+  });
+}
+
+// Insert or update this person's rows (matched by Thread ID). Dates arrive as numbers.
+function syncPush_(me, rows) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = logTab_();
+    const n = sh.getLastRow() - 1;
+    const existing = n > 0 ? sh.getRange(2, 1, n, LOG_HEADER.length).getValues() : [];
+    const rowOf = {};
+    existing.forEach(function (r, i) {
+      const id = String(r[0] || '').trim();
+      const by = String(r[9] || '').trim().toLowerCase();
+      if (id && (by === me || (!by && rowOf[id] === undefined))) rowOf[id] = i + 2;
+    });
+    const appends = [];
+    (Array.isArray(rows) ? rows : []).slice(0, 1000).forEach(function (r) {
+      if (!Array.isArray(r) || !String(r[0] || '').trim()) return;
+      const v = [
+        String(r[0]).trim(), safeCell_(clean_(r[1], 200)), clean_(r[2], 200), safeCell_(clean_(r[3], 300)),
+        r[4] ? new Date(Number(r[4]) || r[4]) : '', Number(r[5]) || 0, clean_(r[6], 120),
+        r[7] ? new Date(Number(r[7]) || r[7]) : '', safeCell_(clean_(r[8], 1000)), me
+      ];
+      if (rowOf[v[0]]) sh.getRange(rowOf[v[0]], 1, 1, LOG_HEADER.length).setValues([v]);
+      else { appends.push(v); rowOf[v[0]] = -1; }
+    });
+    if (appends.length) sh.getRange(sh.getLastRow() + 1, 1, appends.length, LOG_HEADER.length).setValues(appends);
+    PropertiesService.getScriptProperties().setProperty('sync_' + me, String(Date.now()));
+    return { ok: true, saved: (rows || []).length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accountsTab_() {
+  const ss = masterSheet_();
+  let sh = ss.getSheetByName('Accounts');
+  if (!sh) {
+    sh = ss.insertSheet('Accounts');
+    sh.getRange(1, 1, 1, 3).setValues([ACCOUNTS_HEADER]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// { connected, name, lastSync } for the dashboard and the sync script.
+function accountInfo_(me) {
+  const sh = accountsTab_();
+  const n = sh.getLastRow() - 1;
+  let row = null;
+  if (n > 0) sh.getRange(2, 1, n, 3).getValues().forEach(function (r) { if (String(r[0]).trim().toLowerCase() === me) row = r; });
+  const active = row ? ['yes', 'active', 'true', 'y', '1'].indexOf(String(row[2]).trim().toLowerCase()) >= 0 || row[2] === true : false;
+  return {
+    connected: active,
+    name: row ? String(row[1] || '').trim() : '',
+    lastSync: Number(PropertiesService.getScriptProperties().getProperty('sync_' + me) || 0)
+  };
+}
+
+function setAccount_(me, on, name) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = accountsTab_();
+    const n = sh.getLastRow() - 1;
+    let rowNum = 0;
+    if (n > 0) sh.getRange(2, 1, n, 1).getValues().forEach(function (r, i) { if (String(r[0]).trim().toLowerCase() === me) rowNum = i + 2; });
+    name = clean_(name, 80);
+    if (!rowNum) {
+      if (!on) return { ok: true };
+      sh.appendRow([me, safeCell_(name || me.split('@')[0]), 'Yes']);
+    } else {
+      sh.getRange(rowNum, 3).setValue(on ? 'Yes' : 'No');
+      if (on && name) sh.getRange(rowNum, 2).setValue(safeCell_(name));
+    }
+    return { ok: true, account: accountInfo_(me) };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* ---------- helpers ---------- */
