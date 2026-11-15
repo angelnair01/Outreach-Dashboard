@@ -284,3 +284,8 @@ tbody tr.static:hover { background: none; }
 .gmail-bar.warn { justify-content: space-between; background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; margin: 0 0 16px; }
 .gmail-bar .btn[disabled] svg { animation: og-spin 1s linear infinite; }
 @keyframes og-spin { to { transform: rotate(360deg); } }
+
+/* ===== Paging ===== */
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 12px; flex-wrap: wrap; }
+.pager:empty { display: none; }
+.more-row { text-align: center; padding-top: 12px; }

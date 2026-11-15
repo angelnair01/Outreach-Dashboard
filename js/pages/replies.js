@@ -1,6 +1,7 @@
 (function () {
   var OG = window.OG;
   var filter = 'all';
+  var STEP = 30, limit = STEP;
 
   OG.pages.replies = {
     title: 'Replies',
@@ -18,7 +19,7 @@
           (OG.CW ? 'Everyone who replied. Decide the next step for each one.' : 'Everyone who replied, newest first. Answer them from Gmail.') + '</p></div>' +
         (OG.CW ? '<div class="seg">' + seg('all', 'All (' + all.length + ')') + seg('decide', 'To decide (' + nDecide + ')') + seg('planned', 'Planned (' + (all.length - nDecide) + ')') + '</div>' : '') +
         '</div>' +
-        (rows.length ? '<div class="grid replies">' + rows.map(function (r) {
+        (rows.length ? '<div class="grid replies">' + rows.slice(0, limit).map(function (r) {
           return '<article class="card reply-card"><div class="reply-top"><div style="min-width:0">' +
             '<h3><a href="#" data-open="' + OG.esc(r.id) + '" style="color:inherit">' + OG.esc(OG.displayName(r)) + '</a></h3>' +
             '<div class="small muted">' + OG.esc(r.subject) + ' · replied ' + OG.fmtRel(r.last) + '</div></div>' + OG.pill(r) + '</div>' +
@@ -27,7 +28,11 @@
               '<a class="btn" href="' + OG.gmailThread(r.id) + '" target="_blank" rel="noopener">' + OG.icon('external') + 'Open in Gmail</a>' +
               '<a class="btn primary" href="' + OG.gmailCompose(r) + '" target="_blank" rel="noopener">' + OG.icon('mail') + 'Reply by email</a></div>' +
             '</article>';
-        }).join('') + '</div>' : '<div class="card empty">No replies yet.</div>');
+        }).join('') + '</div>' +
+          (rows.length > limit ? '<div class="more-row"><button class="btn" id="r-more">Show ' + Math.min(STEP, rows.length - limit) + ' more (' + (rows.length - limit) + ' left)</button></div>' : '')
+          : '<div class="card empty">No replies yet.</div>');
+      var more = el.querySelector('#r-more');
+      if (more) more.onclick = function () { var y = window.scrollY; limit += STEP; OG.pages.replies.render(el); window.scrollTo(0, y); };
 
       el.querySelectorAll('[data-f]').forEach(function (b) {
         b.addEventListener('click', function () { filter = b.getAttribute('data-f'); OG.pages.replies.render(el); });

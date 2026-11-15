@@ -1,7 +1,8 @@
 /* Made-up sample contacts for "Try with sample data". Not real people. */
 (function () {
   var OG = window.OG;
-  OG.demoRows = function () {
+  OG.demoRows = function (count) {
+    count = Math.max(10, Math.min(2000, count || 46));
     var seed = 7;
     var rnd = function () { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
     var pick = function (a) { return a[Math.floor(rnd() * a.length)]; };
@@ -20,13 +21,14 @@
       "Forwarding this to our placement head, she will get in touch."
     ];
     var now = Date.now(), DAY = OG.DAY, rows = [];
-    for (var i = 0; i < 46; i++) {
+    var spread = count > 100 ? 120 : 60; // bigger samples cover more weeks
+    for (var i = 0; i < count; i++) {
       var fn = pick(first), ln = pick(last), org = pick(orgs);
-      var age = Math.floor(rnd() * 60) + (i < 6 ? 0 : 1); // days since first mail
+      var age = Math.floor(rnd() * spread) + (i < 6 ? 0 : 1); // days since first mail
       var firstMs = now - age * DAY - Math.floor(rnd() * 8) * 3600000;
       var subj = pick(subjects); if (/x $/.test(subj)) subj += org;
       var r = {
-        id: 'demo' + (1000 + i) + 'a' + Math.floor(rnd() * 1e6).toString(16),
+        id: 'demo' + (10000 + i) + 'a' + Math.floor(rnd() * 1e6).toString(16),
         name: rnd() < 0.15 ? '' : fn + ' ' + ln,
         email: (fn + '.' + ln).toLowerCase() + '@' + org.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12) + '.example',
         subject: subj, first: firstMs, fu: 0, status: 'Waiting (first mail sent)', last: firstMs, snippet: '', stage: 'waiting', due: false
@@ -66,5 +68,15 @@
       { id: 'Ldemo3', name: 'Elena Thomas', email: '', org: 'Westbrook University', subject: '', notes: 'Sent a connection request with a short note.', added: now - 2 * D, status: 'Contacted', channel: 'LinkedIn', contactedOn: now - 2 * D },
       { id: 'Ldemo4', name: 'Rahul Verma', email: 'rahul.v@oakridge.example', org: 'Oakridge School', subject: '', notes: 'Called the office, asked to email the principal.', added: now - 6 * D, status: 'Contacted', channel: 'Call', contactedOn: now - 6 * D }
     ];
+  };
+})();
+
+/* Sample-data size: ?sample=300 in the address, or the size picked on the sign-in screen. */
+(function () {
+  var OG = window.OG;
+  OG.sampleSize = function () {
+    var m = /[?&]sample=(\d+)/.exec(location.search);
+    if (m) return Number(m[1]);
+    return OG.store.get('og.sample', 46);
   };
 })();

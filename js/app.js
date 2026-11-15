@@ -27,12 +27,16 @@
       '<div id="si-google" style="margin:18px 0 6px;min-height:44px"></div>' +
       '<div class="small muted" id="si-status" aria-live="polite"></div>' +
       '<div class="error" id="si-err" role="alert">' + OG.esc(msg) + '</div>' +
-      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" id="si-demo">Try it with sample data</a> · <a href="privacy.html">Privacy</a></p></div>';
+      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" data-sample="46">Try it with sample data</a>' +
+      ' (load test: <a href="#" data-sample="300">300 mails</a> · <a href="#" data-sample="700">700 mails</a>) · <a href="privacy.html">Privacy</a></p></div>';
 
-    $('si-demo').onclick = function (e) {
-      e.preventDefault(); signingIn = true;
-      OG.signIn(OG.DEMO_TOKEN).then(function () { signingIn = false; showApp(); });
-    };
+    $('signin').querySelectorAll('[data-sample]').forEach(function (a) {
+      a.onclick = function (e) {
+        e.preventDefault(); signingIn = true;
+        OG.store.set('og.sample', Number(a.getAttribute('data-sample'))); OG._demo = null;
+        OG.signIn(OG.DEMO_TOKEN).then(function () { signingIn = false; showApp(); });
+      };
+    });
 
     if (!OG.auth.configured()) {
       $('si-err').textContent = 'Google sign-in is not set up yet (GOOGLE_CLIENT_ID in config.js).';

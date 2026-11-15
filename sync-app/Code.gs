@@ -12,9 +12,9 @@
  */
 
 const DAY = 86400000;
-const QUICK_THREADS = 50;      // newest threads checked every minute and on "Sync"
-const FULL_THREADS = 500;      // all threads, every 30 minutes
-const FULL_EVERY_MIN = 30;
+const QUICK_THREADS = 50;      // most recently active threads, checked every minute and on "Sync"
+const MAX_IMPORT_THREADS = 3000; // upper limit for the full / import checks
+const FULL_EVERY_MIN = 30;     // how often all ACTIVE threads are re-checked
 const MAX_SENDS_PER_RUN = 10;
 const COL = { id: 0, name: 1, email: 2, subject: 3, first: 4, fu: 5, status: 6, last: 7, snippet: 8, sentBy: 9 };
 
@@ -30,7 +30,7 @@ function doGet(e) {
 
 // Called from the page.
 function pageStatus() {
-  const res = api_('syncPull');
+  const res = api_('syncPull', { ids: [] });   // just the account status, no rows
   return { me: myEmail_(), account: res.account || {}, timer: hasTimer_(), dryRun: DRY_RUN };
 }
 
@@ -65,17 +65,29 @@ function syncMine_(manual, forceFull) {
   if (!lock.tryLock(manual ? 25000 : 1000)) return { summary: 'A sync was already running. Try again in a few seconds.' };
   try {
     const me = myEmail_();
-    const pulled = api_('syncPull');
+    const props = PropertiesService.getUserProperties();
+    const now = Date.now(), started = Date.now();
+    const allLabels = '{label:"' + OUTREACH_LABEL + '" label:"' + REPLIED_LABEL + '" label:"' + DONE_LABEL + '"}';
+
+    // Which conversations to look at:
+    //  - import : everything (first connect, continued in chunks until done)
+    //  - full   : every 30 min, only ACTIVE ones (label Outreach = still waiting for a reply)
+    //  - quick  : every minute / Sync button, the 50 most recently active (any label, so late replies are caught)
+    let mode = 'quick';
+    if (forceFull || props.getProperty('importPending')) mode = 'import';
+    else if (!manual && now - Number(props.getProperty('lastFull') || 0) > FULL_EVERY_MIN * 60000) mode = 'full';
+    const threads = mode === 'import' ? searchAll_(allLabels, MAX_IMPORT_THREADS)
+      : mode === 'full' ? searchAll_('label:"' + OUTREACH_LABEL + '"', MAX_IMPORT_THREADS)
+      : GmailApp.search(allLabels, 0, QUICK_THREADS);
+    if (mode !== 'quick') props.setProperty('lastFull', String(now));
+
+    // Only the sheet rows for these conversations (keeps every run small, however big the sheet gets).
+    const pulled = api_('syncPull', { ids: threads.map(function (t) { return t.getId(); }) });
     const account = pulled.account || {};
     if (!account.connected) return { summary: 'This Gmail is not connected.' };
     const senderName = account.name || me.split('@')[0];
-
-    const props = PropertiesService.getUserProperties();
-    const now = Date.now();
-    const full = forceFull || (!manual && now - Number(props.getProperty('lastFull') || 0) > FULL_EVERY_MIN * 60000);
-    const query = '{label:"' + OUTREACH_LABEL + '" label:"' + REPLIED_LABEL + '" label:"' + DONE_LABEL + '"}';
-    const threads = GmailApp.search(query, 0, full ? FULL_THREADS : QUICK_THREADS);
-    if (full) props.setProperty('lastFull', String(now));
+    const maxAnalyse = manual ? 60 : 250;   // conversations read in full per run; the rest continue next minute
+    let analysed = 0, unfinished = false;
 
     const existing = {};
     (pulled.rows || []).forEach(function (r) { if (r && r[0]) existing[String(r[0])] = r; });
@@ -96,6 +108,9 @@ function syncMine_(manual, forceFull) {
         return;
       }
 
+      // Big mailbox: stop reading after a chunk (or 4 minutes) and continue on the next run.
+      if (analysed >= maxAnalyse || Date.now() - started > 240000) { unfinished = true; return; }
+      analysed++;
       const a = analyze_(thread, myAddrs);
       if (!a) return;
 
@@ -132,8 +147,17 @@ function syncMine_(manual, forceFull) {
       if (!same) out.push(vals);
     });
 
-    api_('syncPush', { rows: out });   // always sent: also tells the dashboard "Gmail checked just now"
-    return { summary: threads.length + ' threads checked, ' + out.length + ' updated, ' + sends + ' follow-ups sent' + (DRY_RUN ? ' (test mode)' : ''), updated: out.length };
+    // Send in chunks of 300 rows, so a big first import never makes one huge request.
+    for (let i = 0; i < out.length; i += 300) api_('syncPush', { rows: out.slice(i, i + 300) });
+    if (!out.length) api_('syncPush', { rows: [] });   // also tells the dashboard "Gmail checked just now"
+    if (mode === 'import' || unfinished) {
+      if (unfinished) props.setProperty('importPending', '1'); else props.deleteProperty('importPending');
+    }
+    return {
+      summary: threads.length + ' conversations checked, ' + out.length + ' updated, ' + sends + ' follow-ups sent' +
+        (unfinished ? ' (big mailbox: the rest continues automatically over the next minutes)' : '') + (DRY_RUN ? ' (test mode)' : ''),
+      updated: out.length
+    };
   } finally {
     lock.releaseLock();
   }
@@ -221,6 +245,17 @@ function api_(action, extra) {
 }
 
 /* ---------- small helpers ---------- */
+
+// Gmail returns at most 500 conversations per search, so page through.
+function searchAll_(query, max) {
+  const out = [];
+  for (let start = 0; start < max; start += 500) {
+    const batch = GmailApp.search(query, start, Math.min(500, max - start));
+    Array.prototype.push.apply(out, batch);
+    if (batch.length < 500) break;
+  }
+  return out;
+}
 
 function hasTimer_() {
   return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'syncTimer'; });

@@ -38,14 +38,20 @@
     }
   };
 
-  var lastSig = '';
-  /* opts.quiet: background check, no "Syncing…" flicker, and pages only redraw if something changed. */
+  var lastSig = '', lastVer = '', lastFullAt = 0;
+  var FULL_EVERY_MS = 5 * 60000; // safety: a complete reload every 5 minutes even if "nothing changed"
+  /* opts.quiet: background check, no "Syncing…" flicker, and pages only redraw if something changed.
+     Background checks ask "anything new since version X?"; the answer is tiny when nothing changed. */
   OG.refresh = function (opts) {
     opts = opts || {};
     if (!S.token) return Promise.resolve();
     if (S.loading) return S.loading;
     if (!opts.quiet) { S.error = ''; }
-    S.loading = OG.api.fetchAll(S.token).then(function (d) {
+    var since = opts.quiet && lastVer && !S.error && Date.now() - lastFullAt < FULL_EVERY_MS ? lastVer : '';
+    S.loading = OG.api.fetchAll(S.token, since).then(function (d) {
+      S.lastSync = Date.now(); S.account = d.account || null;
+      if (d.unchanged) { S.error = ''; return false; }
+      lastVer = d.ver || ''; lastFullAt = Date.now();
       var sig = JSON.stringify([d.rows, d.leads]);
       var changed = sig !== lastSig || !!S.error;
       lastSig = sig;
@@ -79,7 +85,7 @@
   window.addEventListener('focus', function () { if (S.token && Date.now() - S.lastSync > 10000) OG.refresh({ quiet: true }); });
 
   OG.signIn = function (token) {
-    S.token = token; lastSig = '';
+    S.token = token; lastSig = ''; lastVer = ''; lastFullAt = 0;
     return OG.refresh({ throwErrors: true }).then(function () {
       OG.store.set('og.token', token); OG.startPolling();
     }, function (e) { S.token = ''; throw e; });

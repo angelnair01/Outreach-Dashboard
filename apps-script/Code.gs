@@ -37,7 +37,7 @@ function doPost(e) {
     if (/^sync/.test(String(body.action || ''))) {
       const syncer = checkAccessToken_(body.accessToken);
       if (syncer.error) return json_(syncer);
-      if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email), account: accountInfo_(syncer.email) });
+      if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email, body.ids), account: accountInfo_(syncer.email) });
       if (body.action === 'syncPush') return json_(syncPush_(syncer.email, body.rows || []));
       if (body.action === 'syncConnect') return json_(setAccount_(syncer.email, true, body.name));
       if (body.action === 'syncDisconnect') return json_(setAccount_(syncer.email, false));
@@ -49,12 +49,19 @@ function doPost(e) {
 
     // Everything below only ever sees / changes the signed-in person's own rows.
     const me = who.email;
-    if (!body.action || body.action === 'get') return json_({ rows: getData(me), leads: getLeads(me), user: me, account: accountInfo_(me) });
+    if (!body.action || body.action === 'get') {
+      // "Anything new since my last look?" If not, answer in a few milliseconds without reading the sheet.
+      const ver = getVer_(me);
+      if (body.since && String(body.since) === ver) return json_({ unchanged: true, ver: ver, account: accountInfo_(me) });
+      return json_({ rows: getData(me), leads: getLeads(me), user: me, account: accountInfo_(me), ver: ver });
+    }
     if (body.action === 'gmailStatus') return json_({ account: accountInfo_(me) });
-    if (body.action === 'addLead') return json_(addLead(body.lead || {}, me));
-    if (body.action === 'contactedLead') return json_(updateLead(body.id, { status: 'Contacted', channel: body.channel, contactedOn: body.contactedOn }, me));
-    if (body.action === 'removeLead') return json_(updateLead(body.id, { status: 'Removed' }, me));
-    if (body.action === 'mark') return json_(markStage(body.id, body.stage, me));
+    let res;
+    if (body.action === 'addLead') res = addLead(body.lead || {}, me);
+    else if (body.action === 'contactedLead') res = updateLead(body.id, { status: 'Contacted', channel: body.channel, contactedOn: body.contactedOn }, me);
+    else if (body.action === 'removeLead') res = updateLead(body.id, { status: 'Removed' }, me);
+    else if (body.action === 'mark') res = markStage(body.id, body.stage, me);
+    if (res) { if (res.ok) bumpVer_(me); return json_(res); }
     return json_({ error: 'unknown action' });
   } catch (err) {
     return json_({ error: errText_(err) });
@@ -323,13 +330,16 @@ function logTab_() {
 }
 
 // This person's rows (and older rows with no sender, which may be theirs) as plain values.
-function syncPull_(me) {
+// `ids` (optional): only these Thread IDs, so the every-minute check stays small with hundreds of rows.
+function syncPull_(me, ids) {
   const sh = logTab_();
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
+  const want = Array.isArray(ids) ? ids.reduce(function (m, id) { m[String(id)] = 1; return m; }, {}) : null;
   return sh.getRange(2, 1, n, LOG_HEADER.length).getValues().filter(function (r) {
+    const id = String(r[0] || '').trim();
     const by = String(r[9] || '').trim().toLowerCase();
-    return String(r[0] || '').trim() && (by === me || !by);
+    return id && (by === me || !by) && (!want || want[id]);
   }).map(function (r) {
     return r.map(function (v) { return v instanceof Date ? v.getTime() : v; });
   });
@@ -362,6 +372,7 @@ function syncPush_(me, rows) {
     });
     if (appends.length) sh.getRange(sh.getLastRow() + 1, 1, appends.length, LOG_HEADER.length).setValues(appends);
     PropertiesService.getScriptProperties().setProperty('sync_' + me, String(Date.now()));
+    if ((rows || []).length) bumpVer_(me);
     return { ok: true, saved: (rows || []).length };
   } finally {
     lock.releaseLock();
@@ -413,6 +424,51 @@ function setAccount_(me, on, name) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- "has anything changed?" version per person ---------- */
+
+function getVer_(me) { return PropertiesService.getScriptProperties().getProperty('ver_' + me) || 'v0'; }
+function bumpVer_(me) { PropertiesService.getScriptProperties().setProperty('ver_' + me, 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)); }
+
+/* ---------- load-test helpers (run from the Apps Script editor) ---------- */
+
+// Adds `n` fake rows (Thread ID starts with TEST-) for the script owner, to test speed with lots of mail.
+function addTestRows(n) {
+  n = Number(n) || 300;
+  const me = ownerEmail_();
+  const statuses = ['Waiting (first mail sent)', 'Waiting (follow-up 1 sent)', 'Waiting (follow-up 2 sent)', 'Replied',
+    'Stopped (no reply)', 'Stopped (no reply)', 'Stopped (no reply)', 'Bounced', 'Follow-up 1 due (waiting for send window)'];
+  const now = Date.now(), rows = [];
+  for (let i = 0; i < n; i++) {
+    const s = statuses[i % statuses.length];
+    const first = new Date(now - (i % 120) * 86400000 - i * 60000);
+    const fu = /follow-up 2|Stopped/.test(s) ? 2 : /follow-up 1/.test(s) ? 1 : 0;
+    rows.push(['TEST-' + (100000 + i), 'Test Person ' + (i + 1), 'test' + (i + 1) + '@example.com', 'Load test mail ' + (i + 1),
+      first, fu, s, new Date(first.getTime() + fu * 7 * 86400000), s === 'Replied' ? 'Thanks, sounds interesting! (test reply ' + (i + 1) + ')' : '', me]);
+  }
+  const sh = logTab_();
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, LOG_HEADER.length).setValues(rows);
+  bumpVer_(me);
+  Logger.log('Added ' + n + ' test rows for ' + me + '. Run removeTestRows to delete them.');
+}
+function addTestRows300() { addTestRows(300); }
+function addTestRows700() { addTestRows(700); }
+
+// Deletes every row whose Thread ID starts with TEST- (your real rows are not touched).
+function removeTestRows() {
+  const sh = logTab_();
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  const keep = sh.getRange(2, 1, n, LOG_HEADER.length).getValues().filter(function (r) { return String(r[0]).indexOf('TEST-') !== 0; });
+  // Real rows are written first (moved up), then only the leftover rows at the bottom are cleared.
+  if (keep.length) sh.getRange(2, 1, keep.length, LOG_HEADER.length).setValues(keep);
+  if (n > keep.length) sh.getRange(2 + keep.length, 1, n - keep.length, LOG_HEADER.length).clearContent();
+  lock.releaseLock();
+  bumpVer_(ownerEmail_());
+  Logger.log('Removed ' + (n - keep.length) + ' test rows. ' + keep.length + ' real rows kept.');
 }
 
 /* ---------- helpers ---------- */

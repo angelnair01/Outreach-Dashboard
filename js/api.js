@@ -56,14 +56,15 @@
   var copy = function (a) { return a.map(function (r) { return Object.assign({}, r); }); };
 
   OG.api = {
-    /* -> { rows: [...Follow-up Log], leads: [...Leads tab] } */
-    fetchAll: function (token) {
+    /* -> { rows, leads, account, ver }  or  { unchanged: true, account, ver } when `since` is still current */
+    fetchAll: function (token, since) {
       if (token === DEMO) {
-        if (!OG._demo) { OG._demo = OG.demoRows(); OG._demoLeads = OG.demoLeads(); }
+        if (!OG._demo) { OG._demo = OG.demoRows(OG.sampleSize()); OG._demoLeads = OG.demoLeads(); }
         return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
       }
-      return call(token, null, { action: 'get' }).then(function (d) {
-        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], account: d.account || null };
+      return call(token, null, { action: 'get', since: since || '' }).then(function (d) {
+        if (d.unchanged) return { unchanged: true, account: d.account || null, ver: d.ver };
+        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], account: d.account || null, ver: d.ver || '' };
       });
     },
     addLead: function (token, lead) {
