@@ -10,7 +10,7 @@ window.APP_CONFIG = {
   FOLLOWUP_DAYS: 7,
   MAX_FOLLOWUPS: 2,
   // "Outreach Sync" web app address (ends in /exec). Used by "Connect my Gmail" and the Sync button.
-  SYNC_URL: 'PASTE_SYNC_WEB_APP_URL_HERE',
+  SYNC_URL: 'https://script.google.com/macros/s/AKfycbz8dpELo0OrtZJl0H33kpaoGMDGmDJDVsFW7UPcSeGIqX_h1B-jwTJ5vCtbS66ES22r/exec',
   // Live sync: how often (seconds) the open dashboard re-checks the sheet. Minimum 10.
   LIVE_SECONDS: 10,
   // Call / WhatsApp features (phone numbers, "Plan a call", the Call / WhatsApp column).
