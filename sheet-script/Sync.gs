@@ -12,9 +12,11 @@
  *     then it stops ("Stopped (no reply)", label "Outreach-Done")
  * Everyone's rows live in this one sheet. The dashboard shows each person only their own rows.
  *
+ * Replaces the earlier "AUTO FOLLOW-UP (v3)" script: same settings, wording, labels and Accounts tab.
+ *
  * SAFETY
- *   MODE = 'test' : reads and logs everything, sends NOTHING (status "TEST: would send follow-up N").
- *   MODE = 'live' : actually sends follow-ups.
+ *   DRY_RUN = true  : reads and logs everything, sends NOTHING (status "TEST: would send follow-up N").
+ *   DRY_RUN = false : actually sends follow-ups.
  *   A thread first seen when it is already older than MAX_AGE_DAYS_FOR_NEW never gets follow-ups.
  *   Follow-ups already in a Gmail thread are counted, so nothing is sent twice.
  *   At most MAX_SENDS_PER_RUN follow-ups per run, only inside the send window.
@@ -22,31 +24,31 @@
 
 /* ===================== SETTINGS (safe to edit) ===================== */
 
-const MODE = 'test';                    // 'test' first. Change to 'live' when the dashboard looks right.
+const DRY_RUN = true;          // true = only logs what WOULD be sent (start here). false = really sends.
+
+const WAIT_DAYS = 7;           // days between each mail
+const MAX_FOLLOWUPS = 2;       // follow-ups after your first mail
+const MAX_PER_DAY = 30;        // safety cap on follow-ups sent per day, per Gmail account
+const SEND_FROM_HOUR = 9;      // only send between these hours (sheet time zone)
+const SEND_TO_HOUR = 19;
+const MAX_AGE_DAYS_FOR_NEW = 30; // a thread first seen when already older than this is logged but never followed up
+
+// {{name}} = person you mailed (first name), {{sender}} = name from the Accounts tab
+const FOLLOWUP_TEXT = [
+  'Hi {{name}},\n\nJust following up on my earlier email in case it got buried. Would love to hear your thoughts.\n\nThanks,\n{{sender}}',
+  'Hi {{name}},\n\nLast nudge from my side. If this is not relevant, no problem at all, just let me know.\n\nThanks,\n{{sender}}'
+];
 
 const OUTREACH_LABEL = 'Outreach';
 const REPLIED_LABEL = 'Outreach-Replied';
 const DONE_LABEL = 'Outreach-Done';
 
-const FOLLOWUP_DAYS = 7;                // days without reply before each follow-up
-const MAX_FOLLOWUPS = 2;
-const MAX_AGE_DAYS_FOR_NEW = 30;        // older threads seen for the first time: logged, never followed up
-const MAX_SENDS_PER_RUN = 10;
-
-const SEND_DAYS = [1, 2, 3, 4, 5];      // 0 = Sunday ... 6 = Saturday (sheet script time zone)
-const SEND_FROM_HOUR = 9;               // 09:00
-const SEND_TO_HOUR = 18;                // until 18:00
-
-// {first_name} {sender_name} {subject} are filled in automatically.
-const FOLLOWUP_TEMPLATES = [
-  'Hi {first_name},\n\nI wanted to follow up on my email below in case it got buried. ' +
-  'I would love to hear your thoughts whenever you have a moment.\n\nBest regards,\n{sender_name}',
-
-  'Hi {first_name},\n\nJust checking in one last time on my note below. ' +
-  'If now is not the right time, no worries at all, happy to reconnect later.\n\nBest regards,\n{sender_name}'
-];
-
 /* ===================== (no need to edit below) ===================== */
+
+const MODE = DRY_RUN ? 'test' : 'live';
+const FOLLOWUP_DAYS = WAIT_DAYS;
+const MAX_SENDS_PER_RUN = 10;
+const SEND_DAYS = [0, 1, 2, 3, 4, 5, 6]; // every day, like before
 
 const LOG_TAB = 'Follow-up Log';
 const ACCOUNTS_TAB = 'Accounts';
@@ -80,7 +82,7 @@ function connectMyGmail() {
     const name = String(r.getResponseText() || '').trim() || me.split('@')[0];
     const h = acc.header;
     const newRow = new Array(Math.max(h.length, 3)).fill('');
-    newRow[acc.emailCol] = me; newRow[acc.nameCol] = name; newRow[acc.statusCol] = 'Active';
+    newRow[acc.emailCol] = me; newRow[acc.nameCol] = name; newRow[acc.statusCol] = 'Yes';
     acc.sheet.appendRow(newRow);
   } else {
     setActive_(acc, row, true);
@@ -115,7 +117,7 @@ function showMyStatus() {
   const acc = accountsTab_();
   const row = findAccountRow_(acc, me);
   const status = row ? acc.sheet.getRange(row, acc.statusCol + 1).getValue() : 'not connected';
-  const timers = ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'syncMine'; }).length;
+  const timers = ScriptApp.getProjectTriggers().filter(function (t) { return /^(syncMine|run)$/.test(t.getHandlerFunction()); }).length;
   SpreadsheetApp.getUi().alert(me + '\nAccounts tab: ' + status + '\nAutomatic sync: ' + (timers ? 'ON (every minute)' : 'OFF') + '\nMode: ' + MODE);
 }
 
@@ -133,7 +135,9 @@ function syncMine() {
   const props = PropertiesService.getUserProperties();
   const now = Date.now();
   const full = now - Number(props.getProperty('lastFull') || 0) > FULL_EVERY_MIN * 60000;
-  const threads = GmailApp.search('label:"' + OUTREACH_LABEL + '"', 0, full ? FULL_THREADS : QUICK_THREADS);
+  // Finished threads move to Outreach-Replied / Outreach-Done, so look at all three labels.
+  const query = '{label:"' + OUTREACH_LABEL + '" label:"' + REPLIED_LABEL + '" label:"' + DONE_LABEL + '"}';
+  const threads = GmailApp.search(query, 0, full ? FULL_THREADS : QUICK_THREADS);
   if (full) props.setProperty('lastFull', String(now));
 
   const myAddrs = [me].concat(GmailApp.getAliases().map(function (a) { return a.toLowerCase(); }));
@@ -163,12 +167,12 @@ function syncMine() {
     let status, fu = a.fu, last = a.lastMs;
     if (a.bounced) {
       status = 'Bounced';
-      thread.addLabel(label(DONE_LABEL));
+      moveLabel_(thread, DONE_LABEL, label);
     } else if (a.replied) {
       status = 'Replied';
-      thread.addLabel(label(REPLIED_LABEL));
+      moveLabel_(thread, REPLIED_LABEL, label);
     } else if (fu >= MAX_FOLLOWUPS) {
-      if (now - a.lastMineMs >= FOLLOWUP_DAYS * DAY) { status = 'Stopped (no reply)'; thread.addLabel(label(DONE_LABEL)); }
+      if (now - a.lastMineMs >= FOLLOWUP_DAYS * DAY) { status = 'Stopped (no reply)'; moveLabel_(thread, DONE_LABEL, label); }
       else status = 'Waiting (follow-up ' + fu + ' sent)';
     } else if (now - a.lastMineMs < FOLLOWUP_DAYS * DAY) {
       status = fu ? 'Waiting (follow-up ' + fu + ' sent)' : 'Waiting (first mail sent)';
@@ -180,9 +184,10 @@ function syncMine() {
       const n = fu + 1;
       if (MODE !== 'live') status = 'TEST: would send follow-up ' + n;
       else if (!inSendWindow_(new Date(now))) status = 'Follow-up ' + n + ' due (waiting for send window)';
-      else if (sends >= MAX_SENDS_PER_RUN) status = 'Follow-up ' + n + ' due (waiting for send window)';
+      else if (sends >= MAX_SENDS_PER_RUN || sentToday_() >= MAX_PER_DAY) status = 'Follow-up ' + n + ' due (waiting for send window)';
       else {
-        sendFollowUp_(thread, a, n, senderName, me);
+        sendFollowUp_(thread, a, n, senderName);
+        sentToday_(1);
         sends++; fu = n; last = Date.now();
         status = 'Follow-up ' + n + ' sent';
       }
@@ -231,6 +236,8 @@ function analyze_(thread, myAddrs) {
     if (isMine(m)) {
       lastMineMs = m.getDate().getTime();
       if (!replied) fu++;
+    } else if (/out of office|automatic reply|auto-reply|autoreply/i.test(m.getSubject())) {
+      continue; // auto-replies are not real replies
     } else {
       replied = true; replyMsg = m;
     }
@@ -248,27 +255,28 @@ function analyze_(thread, myAddrs) {
   };
 }
 
-function sendFollowUp_(thread, a, n, senderName, me) {
-  const tpl = FOLLOWUP_TEMPLATES[Math.min(n, FOLLOWUP_TEMPLATES.length) - 1];
+// Same way of sending as the original script: a reply inside the same Gmail thread.
+function sendFollowUp_(thread, a, n, senderName) {
+  const tpl = FOLLOWUP_TEXT[Math.min(n, FOLLOWUP_TEXT.length) - 1];
   const firstName = (a.name || '').split(/\s+/)[0] || 'there';
-  const body = tpl.replace(/\{first_name\}/g, firstName).replace(/\{sender_name\}/g, senderName).replace(/\{subject\}/g, a.subject);
-  const subject = /^re:/i.test(a.subject) ? a.subject : 'Re: ' + a.subject;
-  const msgId = a.lastMessage.getHeader('Message-ID');
-  const enc = function (s) { return '=?UTF-8?B?' + Utilities.base64Encode(s, Utilities.Charset.UTF_8) + '?='; };
-  const mime = [
-    'From: ' + enc(senderName) + ' <' + me + '>',
-    'To: ' + a.email,
-    'Subject: ' + enc(subject),
-    msgId ? 'In-Reply-To: ' + msgId : '',
-    msgId ? 'References: ' + msgId : '',
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: base64',
-    '',
-    Utilities.base64Encode(body, Utilities.Charset.UTF_8)
-  ].filter(function (l, i, arr) { return l !== '' || i === arr.length - 2; }).join('\r\n');
-  // Gmail API (advanced service "Gmail") keeps the follow-up inside the same conversation.
-  Gmail.Users.Messages.send({ raw: Utilities.base64EncodeWebSafe(mime, Utilities.Charset.UTF_8), threadId: thread.getId() }, 'me');
+  const body = tpl.replace(/\{\{name\}\}/g, firstName).replace(/\{\{sender\}\}/g, senderName);
+  thread.reply(body);
+  Utilities.sleep(1500);
+}
+
+// Follow-ups sent today by this Gmail account (for the MAX_PER_DAY cap).
+function sentToday_(add) {
+  const p = PropertiesService.getUserProperties();
+  const key = 'sent_' + Utilities.formatDate(new Date(Date.now()), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const n = Number(p.getProperty(key)) || 0;
+  if (add) p.setProperty(key, String(n + add));
+  return n + (add || 0);
+}
+
+// Like the original script: finished threads move from "Outreach" to "Outreach-Replied" / "Outreach-Done".
+function moveLabel_(thread, toName, label) {
+  thread.addLabel(label(toName));
+  try { thread.removeLabel(label(OUTREACH_LABEL)); } catch (e) {}
 }
 
 /* ---------- sheet helpers ---------- */
@@ -316,7 +324,7 @@ function isActive_(v) {
 function setActive_(acc, row, on) {
   const cell = acc.sheet.getRange(row, acc.statusCol + 1);
   const cur = cell.getValue();
-  cell.setValue(typeof cur === 'boolean' ? on : (on ? 'Active' : 'Inactive'));
+  cell.setValue(typeof cur === 'boolean' ? on : (/^(active|inactive)$/i.test(String(cur)) ? (on ? 'Active' : 'Inactive') : (on ? 'Yes' : 'No')));
 }
 
 function accountsTab_() {
@@ -324,7 +332,7 @@ function accountsTab_() {
   let sh = ss.getSheetByName(ACCOUNTS_TAB);
   if (!sh) {
     sh = ss.insertSheet(ACCOUNTS_TAB);
-    sh.getRange(1, 1, 1, 3).setValues([['Email', 'Name', 'Status']]).setFontWeight('bold');
+    sh.getRange(1, 1, 1, 3).setValues([['Gmail address', 'Name to sign with', 'Active (Yes/No)']]).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
   const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 3)).getValues()[0].map(function (h) { return String(h).trim(); });
@@ -342,7 +350,8 @@ function findAccountRow_(acc, email) {
 
 function removeMyTriggers_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'syncMine') ScriptApp.deleteTrigger(t); // only this person's own timers are visible here
+    // the old hourly 'run' timer is replaced by the every-minute one (only this person's own timers are visible here)
+    if (t.getHandlerFunction() === 'syncMine' || t.getHandlerFunction() === 'run') ScriptApp.deleteTrigger(t);
   });
 }
 
@@ -384,3 +393,7 @@ function toMs_(v) {
   const t = new Date(v).getTime();
   return isNaN(t) ? 0 : t;
 }
+
+/* ---------- kept for the original script's hourly timer ---------- */
+// An existing "run" timer from the old version keeps working until "Connect my Gmail" replaces it.
+function run() { return syncMine(); }
