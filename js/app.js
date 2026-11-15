@@ -23,11 +23,11 @@
     $('app').hidden = true; $('signin').hidden = false;
     var msg = OG._signOutMsg; OG._signOutMsg = '';
     $('signin').innerHTML = '<div class="card"><div class="brand" style="padding:0"><span class="brand-mark"></span>' + OG.esc((window.APP_CONFIG || {}).APP_NAME || 'Outreach') + '</div>' +
-      '<p class="muted" style="margin-top:12px">Sign in with your Google account. Only people on the access list can open this dashboard.</p>' +
+      '<p class="muted" style="margin-top:12px">Sign in with your Gmail to see your own outreach, replies and follow-ups.</p>' +
       '<div id="si-google" style="margin:18px 0 6px;min-height:44px"></div>' +
       '<div class="small muted" id="si-status" aria-live="polite"></div>' +
       '<div class="error" id="si-err" role="alert">' + OG.esc(msg) + '</div>' +
-      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" id="si-demo">Try it with sample data</a></p></div>';
+      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" id="si-demo">Try it with sample data</a> · <a href="privacy.html">Privacy</a></p></div>';
 
     $('si-demo').onclick = function (e) {
       e.preventDefault(); signingIn = true;

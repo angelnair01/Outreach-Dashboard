@@ -34,9 +34,9 @@
             '<p><span class="pill st-replied">Live</span> While this page is open it checks your sheet every ' + OG.LIVE_SECONDS + ' seconds, and right away when you come back to the tab.</p>' +
             '<p class="small muted">New mails, replies and follow-ups reach the sheet when your sheet script runs (set its trigger to every 5 minutes for near real time). They then show here within about ' + OG.LIVE_SECONDS + ' seconds.</p>' +
           '</section>' +
-          '<section class="card"><h2>Who can open this dashboard</h2>' +
-            '<p>Only Google accounts listed in the <strong>Dashboard Access</strong> tab of the master sheet (one Gmail per row in column A), plus the sheet owner.</p>' +
-            '<p class="muted">Everyone sees <strong>only their own</strong> outreach: mails from their Gmail (the "Sent by" column of the Follow-up Log) and contacts they added. To give someone access, add their Gmail there; to remove them, delete the row.</p>' +
+          '<section class="card"><h2>Who sees what</h2>' +
+            '<p>Anyone can sign in with their own Gmail. Each person sees <strong>only their own</strong> outreach: mails sent from their Gmail (the "Sent by" column of the Follow-up Log) and contacts they added here.</p>' +
+            '<p class="muted">For someone\'s mails to appear, their Gmail must be connected to the sheet script (Accounts tab, see below).</p>' +
           '</section>' +
           '<section class="card"><h2>Tracking another Gmail account</h2>' +
             '<p>To track a partner\'s outreach too (for example Sebin): add their Gmail in the <strong>Accounts</strong> tab (Active), and have them switch on the hourly sheet script for their own Gmail.</p>' +

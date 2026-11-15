@@ -4,8 +4,9 @@
  * This is a SEPARATE Apps Script project from the hourly follow-up script.
  *  - It only READS the "Follow-up Log" tab (never changes it).
  *  - It can add contacts to a "Leads" tab (people you plan to email / outreach you logged).
- *  - Access: "Sign in with Google". Only the script owner and the Gmail addresses listed in the
- *    "Dashboard Access" tab of the master sheet get any data. That tab is created automatically.
+ *  - Access: "Sign in with Google". With OPEN_ACCESS (Settings) anyone can sign in, and every
+ *    person only ever receives their OWN rows ("Sent by" / "Added by"). With OPEN_ACCESS = false,
+ *    only the owner and the "Dashboard Access" tab list get in.
  *  - It stores small "stage" marks (call / whatsapp) in its own Script Properties.
  * It never sends email.
  *
@@ -78,7 +79,10 @@ function checkUser_(idToken) {
   if (!cached) cache.put(key, JSON.stringify(info), Math.max(1, Math.min(600, Number(info.exp) - nowSec)));
 
   const email = String(info.email || '').toLowerCase();
-  if (allowedEmails_().indexOf(email) < 0) return { error: 'not_allowed', email: email };
+  // Open access: any signed-in Gmail gets in, but only ever sees its own rows (see belongsTo_).
+  // Set OPEN_ACCESS = false in Settings to allow only the "Dashboard Access" list instead.
+  const open = typeof OPEN_ACCESS === 'undefined' ? true : OPEN_ACCESS === true;
+  if (!open && allowedEmails_().indexOf(email) < 0) return { error: 'not_allowed', email: email };
   return { email: email };
 }
 

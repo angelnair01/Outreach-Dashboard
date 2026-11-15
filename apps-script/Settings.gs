@@ -9,3 +9,7 @@ const SHEET_IDS = ['PASTE_YOUR_SHEET_ID_HERE'];
 
 // From Google Cloud > Google Auth Platform > Clients (ends in .apps.googleusercontent.com).
 const GOOGLE_CLIENT_ID = 'PASTE_YOUR_CLIENT_ID_HERE';
+
+// true  = anyone can sign in with their Gmail and sees ONLY their own outreach.
+// false = only Gmail addresses listed in the "Dashboard Access" tab can sign in.
+const OPEN_ACCESS = true;
