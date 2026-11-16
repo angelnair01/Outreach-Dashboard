@@ -89,6 +89,7 @@
       var syncBtn = '<button class="btn" data-gmail="sync"' + (busy ? ' disabled' : '') + ' title="Check my Gmail now">' + OG.icon('refresh') + (busy ? 'Syncing…' : 'Sync') + '</button>';
       var fixBtn = '<button class="btn primary" data-gmail="connect">Fix</button>';
       if (busy) return '<div class="gmail-bar"><span class="sync-state"><span class="live-dot busy"></span><span>Checking your Gmail…</span></span>' + syncBtn + '</div>';
+      if (st.state === 'loading') return '<div class="gmail-bar"><span class="sync-state"><span class="live-dot busy"></span><span>Connecting…</span></span>' + syncBtn + '</div>';
       if (st.state === 'error') {
         return '<div class="gmail-bar alert"><span class="sync-state"><span class="live-dot err"></span><span>Auto-sync problem: ' + OG.esc(st.error) + '</span>' +
           '</span>' + fixBtn + syncBtn + '</div>';
@@ -101,17 +102,18 @@
         (st.last ? ' · checked <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>' : '') + '</span></span>' + syncBtn + '</div>';
     },
 
-    /* ok = checked within the last 3 minutes (the timer runs every minute) */
+    /* ok = checked within the last 5 minutes (the timer runs every minute) */
     status: function () {
       if (OG.isDemo()) return { state: 'ok', last: OG.gmail.lastChecked() };
-      var a = S.account || {}, last = a.lastSync || 0, err = a.lastError;
+      if (!S.account) return { state: 'loading', last: 0 }; // nothing from Google yet: never warn before we know
+      var a = S.account, last = a.lastSync || 0, err = a.lastError;
       if (err && err.at >= last) return { state: 'error', last: last, error: err.msg || 'unknown error' };
       if (!last || Date.now() - last > STALE_MS) return { state: 'stale', last: last };
       return { state: 'ok', last: last };
     }
   };
 
-  var STALE_MS = 3 * 60000;
+  var STALE_MS = 5 * 60000; // Google's every-minute timer can run a few minutes late; only warn after 5
   function agoText(ms) {
     if (!ms) return 'never';
     var s = Math.max(0, Math.round((Date.now() - ms) / 1000));

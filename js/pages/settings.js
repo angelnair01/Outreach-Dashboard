@@ -31,7 +31,7 @@
             seg('theme', 'light', theme, 'Light') + seg('theme', 'dark', theme, 'Dark') + seg('theme', 'system', theme, 'System') + '</div>' +
           '</section>' +
           '<section class="card"><h2>Your Gmail</h2>' +
-            (OG.gmail.connected()
+            (!OG.isDemo() && !OG.state.account ? '<p class="muted">Checking your Gmail connection…</p>' : OG.gmail.connected()
               ? (function () {
                   var st = OG.gmail.status();
                   if (st.state === 'ok') return '<p><span class="pill st-replied">Auto-sync on</span> Your mails labelled <strong>Outreach</strong> are checked every minute (last: ' + OG.fmtRel(st.last) + ').</p>';
