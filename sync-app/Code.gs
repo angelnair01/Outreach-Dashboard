@@ -55,7 +55,13 @@ function syncNow() {
 
 // The every-minute timer.
 function syncTimer() {
-  syncMine_(false, false);
+  try {
+    syncMine_(false, false);
+  } catch (e) {
+    // Tell the dashboard what went wrong (shown to this person only), then let Google log it too.
+    try { api_('syncPush', { rows: [], error: String(e && e.message || e) }); } catch (x) {}
+    throw e;
+  }
 }
 
 /* ---------- the sync ---------- */
@@ -338,9 +344,12 @@ const PAGE_HTML = `<!doctype html>
         document.getElementById('dis').onclick = function(){ if (!confirm('Stop checking this Gmail?')) return;
           run('disconnect').then(function(){ c.innerHTML = '<h1>Disconnected</h1><p>' + esc(s.me) + ' is no longer checked. Your rows stay in the sheet.</p>'; tell({ type: 'disconnected' }); }, fail); };
       } else {
-        c.innerHTML = '<h1>Connect your Gmail</h1><p>Signed in as <strong>' + esc(s.me) + '</strong>. Your mails labelled <strong>Outreach</strong> will be checked every minute and shown on the dashboard, only to you.</p>' +
+        var again = s.account.connected && !s.timer; // connected before, but the every-minute check is missing
+        c.innerHTML = (again
+            ? '<h1>Turn auto-sync back on</h1><p><strong>' + esc(s.me) + '</strong> is connected, but its every-minute Gmail check is not running. Click below to switch it back on.</p>'
+            : '<h1>Connect your Gmail</h1><p>Signed in as <strong>' + esc(s.me) + '</strong>. Your mails labelled <strong>Outreach</strong> will be checked every minute and shown on the dashboard, only to you.</p>') +
           '<label class="small" for="nm">Your name (used to sign follow-up emails)</label><input id="nm" value="' + esc(s.account.name || '') + '" placeholder="e.g. Angel Nair">' +
-          '<button id="go">Connect</button><p class="small" id="msg"></p>';
+          '<button id="go">' + (again ? 'Turn auto-sync on' : 'Connect') + '</button><p class="small" id="msg"></p>';
         document.getElementById('go').onclick = function(){
           var nm = document.getElementById('nm').value.trim(); if (!nm) { document.getElementById('msg').textContent = 'Please type your name.'; return; }
           this.disabled = true; document.getElementById('msg').textContent = 'Connecting and checking your Gmail… (first time can take up to a minute)';

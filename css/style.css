@@ -310,3 +310,14 @@ tbody tr.static:hover { background: none; }
 .touch-list li:first-child { border-top: 0; }
 .touch-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .btn.small { padding: 4px 8px; }
+
+/* ===== Live auto-sync status ===== */
+.sync-state { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-replied); box-shadow: 0 0 0 0 var(--st-replied); animation: og-pulse 2s infinite; flex: none; }
+.live-dot.warn { background: var(--st-waiting); animation: none; }
+.live-dot.err { background: var(--danger); animation: none; }
+.live-dot.busy { background: var(--accent); }
+@keyframes og-pulse { 0% { box-shadow: 0 0 0 0 rgba(29,138,78,.45); } 70% { box-shadow: 0 0 0 7px rgba(29,138,78,0); } 100% { box-shadow: 0 0 0 0 rgba(29,138,78,0); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.gmail-bar.alert { justify-content: space-between; background: var(--st-waiting-bg); border-radius: 10px; padding: 8px 12px; margin: 0 0 16px; }
+.gmail-bar.alert .sync-state { color: var(--text); }

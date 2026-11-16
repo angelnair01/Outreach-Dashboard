@@ -32,8 +32,12 @@
           '</section>' +
           '<section class="card"><h2>Your Gmail</h2>' +
             (OG.gmail.connected()
-              ? '<p><span class="pill st-replied">Connected</span> Your mails labelled <strong>Outreach</strong> are checked every minute' +
-                (OG.gmail.lastChecked() ? ' (last: ' + OG.fmtRel(OG.gmail.lastChecked()) + ')' : '') + '.</p>' +
+              ? (function () {
+                  var st = OG.gmail.status();
+                  if (st.state === 'ok') return '<p><span class="pill st-replied">Auto-sync on</span> Your mails labelled <strong>Outreach</strong> are checked every minute (last: ' + OG.fmtRel(st.last) + ').</p>';
+                  return '<p><span class="pill st-due">Needs attention</span> ' + (st.state === 'error' ? 'The last automatic check failed: ' + OG.esc(st.error) : 'The every-minute check has not run since ' + (st.last ? OG.fmtRel(st.last) : 'connecting') + '.') +
+                    ' Click <strong>Manage</strong> to switch it back on.</p>';
+                })() +
                 '<div class="btn-row"><button class="btn" data-gmail="sync">' + OG.icon('refresh') + 'Sync now</button>' +
                 '<button class="btn ghost" data-gmail="connect">Manage / disconnect</button></div>'
               : '<p><span class="pill st-stopped">Not connected</span> Connect once so your outreach shows up here.</p>' +

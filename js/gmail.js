@@ -85,11 +85,49 @@
           'One time only: click, then Allow. Your mails stay private to you.</div>' +
           '<button class="btn primary" data-gmail="connect">' + OG.icon('mail') + 'Connect my Gmail</button></div>';
       }
-      var lc = OG.gmail.lastChecked();
-      return '<div class="gmail-bar"><span class="small muted">' + (busy ? 'Checking your Gmail…' : lc ? 'Gmail checked ' + OG.fmtRel(lc) : 'Gmail not checked yet') +
-        '</span><button class="btn" data-gmail="sync"' + (busy ? ' disabled' : '') + ' title="Check my Gmail now">' + OG.icon('refresh') + (busy ? 'Syncing…' : 'Sync') + '</button></div>';
+      var st = OG.gmail.status();
+      var syncBtn = '<button class="btn" data-gmail="sync"' + (busy ? ' disabled' : '') + ' title="Check my Gmail now">' + OG.icon('refresh') + (busy ? 'Syncing…' : 'Sync') + '</button>';
+      var fixBtn = '<button class="btn primary" data-gmail="connect">Fix</button>';
+      if (busy) return '<div class="gmail-bar"><span class="sync-state"><span class="live-dot busy"></span><span>Checking your Gmail…</span></span>' + syncBtn + '</div>';
+      if (st.state === 'error') {
+        return '<div class="gmail-bar alert"><span class="sync-state"><span class="live-dot err"></span><span>Auto-sync problem: ' + OG.esc(st.error) + '</span>' +
+          '</span>' + fixBtn + syncBtn + '</div>';
+      }
+      if (st.state === 'stale') {
+        return '<div class="gmail-bar alert"><span class="sync-state"><span class="live-dot warn"></span><span>Auto-sync isn\'t running. Last Gmail check <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>.</span>' +
+          '</span>' + fixBtn + syncBtn + '</div>';
+      }
+      return '<div class="gmail-bar"><span class="sync-state" title="Your Gmail is checked automatically every minute"><span class="live-dot"></span><span>Auto-sync on' +
+        (st.last ? ' · checked <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>' : '') + '</span></span>' + syncBtn + '</div>';
+    },
+
+    /* ok = checked within the last 3 minutes (the timer runs every minute) */
+    status: function () {
+      if (OG.isDemo()) return { state: 'ok', last: OG.gmail.lastChecked() };
+      var a = S.account || {}, last = a.lastSync || 0, err = a.lastError;
+      if (err && err.at >= last) return { state: 'error', last: last, error: err.msg || 'unknown error' };
+      if (!last || Date.now() - last > STALE_MS) return { state: 'stale', last: last };
+      return { state: 'ok', last: last };
     }
   };
+
+  var STALE_MS = 3 * 60000;
+  function agoText(ms) {
+    if (!ms) return 'never';
+    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 10) return 'just now';
+    if (s < 60) return s + ' s ago';
+    return OG.fmtRel(ms);
+  }
+  // Keep the "checked 25 s ago" text ticking, and flip to the warning as soon as it goes stale.
+  var lastState = '';
+  setInterval(function () {
+    document.querySelectorAll('[data-ago]').forEach(function (el) { el.textContent = agoText(Number(el.getAttribute('data-ago'))); });
+    if (!S.token || OG.isDemo()) return;
+    var now = OG.gmail.status().state;
+    if (lastState && now !== lastState) OG.emit({ navOnly: true });
+    lastState = now;
+  }, 5000);
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-gmail]');

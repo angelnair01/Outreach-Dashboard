@@ -38,7 +38,7 @@ function doPost(e) {
       const syncer = checkAccessToken_(body.accessToken);
       if (syncer.error) return json_(syncer);
       if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email, body.ids), account: accountInfo_(syncer.email) });
-      if (body.action === 'syncPush') return json_(syncPush_(syncer.email, body.rows || []));
+      if (body.action === 'syncPush') return json_(syncPush_(syncer.email, body.rows || [], body.error));
       if (body.action === 'syncConnect') return json_(setAccount_(syncer.email, true, body.name));
       if (body.action === 'syncDisconnect') return json_(setAccount_(syncer.email, false));
       return json_({ error: 'unknown action' });
@@ -348,7 +348,14 @@ function syncPull_(me, ids) {
 }
 
 // Insert or update this person's rows (matched by Thread ID). Dates arrive as numbers.
-function syncPush_(me, rows) {
+function syncPush_(me, rows, error) {
+  // The every-minute check reports problems here, so the dashboard can show them.
+  const sp = PropertiesService.getScriptProperties();
+  if (error) {
+    sp.setProperty('syncerr_' + me, JSON.stringify({ at: Date.now(), msg: clean_(error, 300) }));
+    return { ok: true, saved: 0 };
+  }
+  sp.deleteProperty('syncerr_' + me);
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -402,7 +409,8 @@ function accountInfo_(me) {
   return {
     connected: active,
     name: row ? String(row[1] || '').trim() : '',
-    lastSync: Number(PropertiesService.getScriptProperties().getProperty('sync_' + me) || 0)
+    lastSync: Number(PropertiesService.getScriptProperties().getProperty('sync_' + me) || 0),
+    lastError: (function () { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('syncerr_' + me) || 'null'); } catch (e) { return null; } })()
   };
 }
 
