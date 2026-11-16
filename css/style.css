@@ -321,3 +321,28 @@ tbody tr.static:hover { background: none; }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 .gmail-bar.alert { justify-content: space-between; background: var(--st-waiting-bg); border-radius: 10px; padding: 8px 12px; margin: 0 0 16px; }
 .gmail-bar.alert .sync-state { color: var(--text); }
+
+/* ===== Contacts (option B) ===== */
+.c-card { padding-top: 6px; }
+.utabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.utab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 0 9px; font-weight: 500; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.utab:hover { color: var(--text); }
+.utab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.utab-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--surface-2); font-size: 12px; color: var(--text-2); text-align: center; }
+.utab[aria-selected="true"] .utab-n { background: var(--accent-soft); color: var(--accent); }
+.c-tools .select { min-width: 150px; }
+.search-box { position: relative; flex: 1 1 240px; display: flex; }
+.search-box svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+.search-box .input { width: 100%; padding-left: 34px; }
+.c-range { margin-top: -4px; }
+.c-table td { padding-top: 12px; padding-bottom: 12px; }
+.c-name { font-weight: 600; }
+.c-mail { font-size: 12px; color: var(--text-2); }
+.ch-icons { display: inline-flex; gap: 6px; }
+.ch-ic { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; align-items: center; justify-content: center; }
+.ch-ic svg { width: 14px; height: 14px; }
+.ch-ic.ch-email { background: var(--ch-email-bg); color: var(--ch-email); }
+.ch-ic.ch-linkedin { background: var(--ch-li-bg); color: var(--ch-li); }
+.ch-ic.ch-whatsapp { background: var(--ch-wa-bg); color: var(--ch-wa); }
+.st-due { color: var(--st-followup); background: var(--st-followup-bg); }
+@media (max-width: 820px) { .c-table th:nth-child(2), .c-table td:nth-child(2) { display: none; } .c-tools .select { flex: 1 1 45%; min-width: 0; } }
