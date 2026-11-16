@@ -1,10 +1,10 @@
 (function () {
   var OG = window.OG;
   var PAGE = 50;
-  var f = { q: '', group: 'all', period: 'all', from: '', to: '', sort: 'first', dir: -1, page: 0 };
+  var f = { q: '', group: 'all', period: 'all', channel: 'any', from: '', to: '', sort: 'first', dir: -1, page: 0 };
   var COLS = [
     { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'subject', label: 'Subject' },
-    { key: 'first', label: 'First sent' }, { key: 'fu', label: 'Follow-ups' }, { key: 'stage', label: 'Stage' }
+    { key: 'first', label: 'First sent' }, { key: 'fu', label: 'Follow-ups' }, { key: 'touches', label: 'Channels' }, { key: 'stage', label: 'Stage' }
   ];
   // Quick filters: big lists (hundreds of "no reply") stay out of the way unless you ask for them.
   var GROUPS = [
@@ -14,6 +14,8 @@
     { key: 'noreply', label: 'No reply', test: function (r) { return r.stage === 'stopped' && !OG.isBounced(r); } },
     { key: 'bounced', label: 'Bounced', test: function (r) { return OG.isBounced(r); } }
   ];
+  // Channel filter: contacts you also followed up with on LinkedIn / WhatsApp / by a manual email.
+  var CHANNELS = [{ key: 'any', label: 'Any channel' }, { key: 'LinkedIn', label: 'LinkedIn' }, { key: 'WhatsApp', label: 'WhatsApp' }, { key: 'Email', label: 'Manual email' }];
   var PERIODS = [{ key: 'all', label: 'Any time' }, { key: '30', label: 'Last 30 days' }, { key: '90', label: 'Last 90 days' }];
 
   function inGroup(key) { return (GROUPS.find(function (g) { return g.key === key; }) || GROUPS[0]).test; }
@@ -25,12 +27,14 @@
     var g = inGroup(f.group);
     return OG.state.rows.filter(function (r) {
       if (!ignoreGroup && !g(r)) return false;
+      if (f.channel !== 'any' && !OG.channelCounts(r)[f.channel]) return false;
       if (q && (r.name + ' ' + r.email + ' ' + r.subject + ' ' + r.status).toLowerCase().indexOf(q) < 0) return false;
       if (r.first && (r.first < from || r.first > to)) return false;
       return true;
     }).sort(function (a, b) {
       var x = a[f.sort], y = b[f.sort];
       if (f.sort === 'name') { x = OG.displayName(a).toLowerCase(); y = OG.displayName(b).toLowerCase(); }
+      if (f.sort === 'touches') { x = OG.touchesFor(a.id).length; y = OG.touchesFor(b.id).length; }
       if (typeof x === 'string') return x.localeCompare(y) * f.dir;
       return ((x || 0) - (y || 0)) * f.dir;
     });
@@ -57,8 +61,8 @@
     el.querySelector('tbody').innerHTML = shown.length ? shown.map(function (r) {
       return '<tr data-open="' + OG.esc(r.id) + '"><td><strong>' + OG.esc(r.name || '—') + '</strong></td><td>' + OG.esc(r.email) + '</td>' +
         '<td class="cell-clip">' + OG.esc(r.subject) + '</td><td class="nowrap">' + OG.fmtDate(r.first) + '</td>' +
-        '<td class="num">' + (r.fu || 0) + '</td><td>' + OG.pill(r) + '</td></tr>';
-    }).join('') : '<tr><td colspan="6" class="empty">No contacts match these filters.</td></tr>';
+        '<td class="num">' + (r.fu || 0) + '</td><td>' + OG.channelTags(r) + '</td><td>' + OG.pill(r) + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="empty">No contacts match these filters.</td></tr>';
     el.querySelector('#c-pager').innerHTML = rows.length > PAGE
       ? '<span class="small muted">Showing ' + (start + 1) + '–' + (start + shown.length) + ' of ' + rows.length + '</span>' +
         '<button class="btn" data-pg="-1"' + (f.page === 0 ? ' disabled' : '') + '>‹ Previous</button>' +
@@ -75,7 +79,7 @@
     render: function (el) {
       el.innerHTML = '<div class="page-head"><div><h1>Contacts</h1><p class="muted" id="c-count"></p></div>' +
         '<button class="btn" id="c-csv">' + OG.icon('download') + 'Download CSV</button></div>' +
-        '<section class="card"><div class="toolbar"><div id="c-groups"></div>' + chips(PERIODS, f.period, 'period') + '</div>' +
+        '<section class="card"><div class="toolbar"><div id="c-groups"></div>' + chips(PERIODS, f.period, 'period') + chips(CHANNELS, f.channel, 'channel') + '</div>' +
         '<div class="toolbar">' +
           '<input class="input search" id="c-q" type="search" placeholder="Search name, email, subject…" value="' + OG.esc(f.q) + '" aria-label="Search">' +
           '<label class="small muted">From <input class="input" id="c-from" type="date" value="' + f.from + '"></label>' +
@@ -91,12 +95,13 @@
       el.querySelector('#c-from').addEventListener('change', function (e) { f.from = e.target.value; reset(); });
       el.querySelector('#c-to').addEventListener('change', function (e) { f.to = e.target.value; reset(); });
       el.querySelector('#c-clear').addEventListener('click', function () {
-        f.q = f.from = f.to = ''; f.group = 'all'; f.period = 'all'; f.page = 0; OG.pages.contacts.render(el);
+        f.q = f.from = f.to = ''; f.group = 'all'; f.period = 'all'; f.channel = 'any'; f.page = 0; OG.pages.contacts.render(el);
       });
       if (!el._ogContactsBound) { // filter / page clicks: attach only once per page element
         el._ogContactsBound = true;
         el.addEventListener('click', function (e) {
-          var g = e.target.closest('[data-group]'), p = e.target.closest('[data-period]'), pg = e.target.closest('[data-pg]');
+          var g = e.target.closest('[data-group]'), p = e.target.closest('[data-period]'), pg = e.target.closest('[data-pg]'), ch = e.target.closest('[data-channel]');
+          if (ch) { f.channel = ch.getAttribute('data-channel'); f.page = 0; OG.pages.contacts.render(el); }
           if (g) { f.group = g.getAttribute('data-group'); f.page = 0; body(el); }
           if (p) { f.period = p.getAttribute('data-period'); f.page = 0; OG.pages.contacts.render(el); }
           if (pg) { f.page += Number(pg.getAttribute('data-pg')); body(el); el.querySelector('table').scrollIntoView({ block: 'nearest' }); }
@@ -111,10 +116,11 @@
       });
       el.querySelector('#c-csv').addEventListener('click', function () {
         var rows = filtered().map(function (r) {
-          return [r.name, r.email, r.subject, r.first ? OG.toInputDate(r.first) : '', r.fu || 0, (OG.STAGES[r.stage] || {}).label || r.stage, r.status, r.last ? OG.toInputDate(r.last) : '', r.snippet];
+          var cc = OG.channelCounts(r);
+          return [r.name, r.email, r.subject, r.first ? OG.toInputDate(r.first) : '', r.fu || 0, cc.Email, cc.LinkedIn, cc.WhatsApp, (OG.STAGES[r.stage] || {}).label || r.stage, r.status, r.last ? OG.toInputDate(r.last) : '', r.snippet];
         });
         OG.downloadCSV('outreach-contacts-' + OG.toInputDate(Date.now()) + '.csv',
-          ['Name', 'Email', 'Subject', 'First sent', 'Follow-ups sent', 'Stage', 'Sheet status', 'Last action', 'Reply'], rows);
+          ['Name', 'Email', 'Subject', 'First sent', 'Follow-ups sent', 'Manual email follow-ups', 'LinkedIn follow-ups', 'WhatsApp follow-ups', 'Stage', 'Sheet status', 'Last action', 'Reply'], rows);
       });
     },
     /* Keep typing focus when data refreshes in the background. */

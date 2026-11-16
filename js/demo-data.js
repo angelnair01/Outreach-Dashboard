@@ -80,3 +80,17 @@
     return OG.store.get('og.sample', 46);
   };
 })();
+
+/* Made-up manual follow-ups (LinkedIn / WhatsApp / Email) for the sample data. */
+(function () {
+  var OG = window.OG;
+  OG.demoTouches = function (rows) {
+    var out = [], chans = ['LinkedIn', 'WhatsApp', 'Email', 'LinkedIn', 'WhatsApp'], notes = ['Sent a connection request', 'Quick nudge on WhatsApp', 'Sent the brochure separately', '', 'Shared a voice note'];
+    (rows || []).slice(0, Math.min(rows.length, 60)).forEach(function (r, i) {
+      if (i % 3) return;
+      var n = 1 + (i % 2);
+      for (var k = 0; k < n; k++) out.push({ id: 'Tdemo' + i + '_' + k, cid: r.id, email: r.email, name: r.name, channel: chans[(i + k) % chans.length], at: Date.now() - (i % 9 + k) * OG.DAY - 3600000, note: notes[(i + k) % notes.length] });
+    });
+    return out;
+  };
+})();

@@ -13,7 +13,7 @@
   function card(r) {
     var extra = r.stage === 'call' ? 'Call planned' : r.stage === 'whatsapp' ? 'WhatsApp planned' : r.status;
     return '<button class="kcard" data-open="' + OG.esc(r.id) + '"><div class="t">' + OG.esc(OG.displayName(r)) + '</div>' +
-      '<div class="s">' + OG.esc(r.subject || '—') + '</div><div class="m">' + OG.esc(extra) + ' · ' + OG.fmtRel(r.last || r.first) + '</div></button>';
+      '<div class="s">' + OG.esc(r.subject || '—') + '</div><div class="m">' + OG.esc(extra) + ' · ' + OG.fmtRel(r.last || r.first) + '</div>' + OG.channelTags(r, true) + '</button>';
   }
 
   OG.pages.pipeline = {

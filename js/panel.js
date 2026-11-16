@@ -13,6 +13,78 @@
     return b.join('');
   };
 
+  /* ---- Manual follow-ups: "I followed up by Email / LinkedIn / WhatsApp" ---- */
+  var pendingChannel = null; // channel whose small form is open
+
+  function touchSection_(r) {
+    var list = OG.touchesFor(r.id);
+    var buttons = OG.TOUCH_CHANNELS.map(function (m) {
+      return '<button class="btn ch-btn ' + m.cls + '" data-touch="' + m.key + '" aria-pressed="' + (pendingChannel === m.key) + '">' +
+        OG.icon(m.icon) + (m.key === 'Email' ? 'Followed up by Email' : 'Followed up on ' + m.label) + '</button>';
+    }).join('');
+    var form = pendingChannel
+      ? '<div class="touch-form"><div class="field"><label for="t-note">Note (optional) for ' + OG.esc(pendingChannel) + '</label>' +
+          '<input class="input" id="t-note" maxlength="500" placeholder="' + (pendingChannel === 'LinkedIn' ? 'e.g. sent a connection request' : pendingChannel === 'WhatsApp' ? 'e.g. sent a quick reminder' : 'e.g. emailed from another address') + '"></div>' +
+          '<div class="field"><label for="t-date">When</label><input class="input" id="t-date" type="date" value="' + OG.toInputDate(Date.now()) + '" max="' + OG.toInputDate(Date.now()) + '"></div>' +
+          '<div class="btn-row"><button class="btn primary" id="t-save">Save</button><button class="btn" id="t-cancel">Cancel</button></div>' +
+          '<div class="error" id="t-err" role="alert"></div></div>'
+      : '';
+    var history = list.length
+      ? '<ul class="touch-list">' + list.map(function (t) {
+          var m = OG.channelMeta(t.channel);
+          return '<li><span class="ch-tag ' + m.cls + '">' + OG.icon(m.icon) + m.short + '</span>' +
+            '<span class="touch-main"><span>' + OG.fmtDate(t.at) + ' <span class="muted small">(' + OG.fmtRel(t.at) + ')</span></span>' +
+            (t.note ? '<span class="small muted">' + OG.esc(t.note) + '</span>' : '') + '</span>' +
+            '<button class="btn ghost small" data-untouch="' + OG.esc(t.id) + '" title="Undo">' + OG.icon('undo') + '</button></li>';
+        }).join('') + '</ul>'
+      : '<p class="small muted">No manual follow-ups yet.</p>';
+    return '<div><div class="section-title">Follow-ups you sent yourself</div>' +
+      '<div class="btn-row ch-buttons">' + buttons + '</div>' + form + history +
+      '<p class="small muted" style="margin-top:6px">Click after you followed up outside the automatic emails, so it shows here and in your counts. ' +
+      'Automatic email follow-ups are not affected.</p></div>';
+  }
+
+  function bindTouches_(r) {
+    var body = document.getElementById('panel-body');
+    body.querySelectorAll('[data-touch]').forEach(function (b) {
+      b.onclick = function () {
+        var ch = b.getAttribute('data-touch');
+        pendingChannel = pendingChannel === ch ? null : ch;
+        render();
+        var n = document.getElementById('t-note'); if (n) n.focus();
+      };
+    });
+    var cancel = document.getElementById('t-cancel');
+    if (cancel) cancel.onclick = function () { pendingChannel = null; render(); };
+    var save = document.getElementById('t-save');
+    if (save) save.onclick = function () {
+      var d = document.getElementById('t-date').value;
+      var at = d && d !== OG.toInputDate(Date.now()) ? new Date(d + 'T12:00:00').getTime() : Date.now();
+      var touch = { cid: r.id, email: r.email, name: r.name, channel: pendingChannel, note: document.getElementById('t-note').value.trim(), at: at };
+      save.disabled = true; save.textContent = 'Saving…';
+      OG.api.addTouch(OG.state.token, touch).then(function (res) {
+        if (res && res.error) throw new Error(res.error);
+        OG.state.touches = [res.touch || touch].concat(OG.state.touches || []);
+        OG.toast('Saved: followed up with ' + OG.displayName(r) + ' on ' + touch.channel + '.');
+        pendingChannel = null; OG.emit(); render();
+      }).catch(function (e) {
+        save.disabled = false; save.textContent = 'Save';
+        document.getElementById('t-err').textContent = 'Could not save: ' + (e.message || e);
+      });
+    };
+    body.querySelectorAll('[data-untouch]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-untouch');
+        b.disabled = true;
+        OG.api.removeTouch(OG.state.token, id).then(function (res) {
+          if (res && res.error) throw new Error(res.error);
+          OG.state.touches = (OG.state.touches || []).filter(function (t) { return t.id !== id; });
+          OG.toast('Removed.'); OG.emit(); render();
+        }).catch(function (e) { b.disabled = false; OG.toast('Could not remove: ' + (e.message || e)); });
+      };
+    });
+  }
+
   function render() {
     var r = OG.byId(currentId);
     var body = document.getElementById('panel-body');
@@ -26,7 +98,7 @@
     body.innerHTML =
       '<div class="panel-head"><div><h2>' + OG.esc(OG.displayName(r)) + '</h2>' +
         (r.name ? '<div class="muted small">' + OG.esc(r.email) + '</div>' : '') +
-        '<div style="margin-top:8px">' + OG.pill(r) + '</div></div>' +
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + OG.pill(r) + OG.channelTags(r) + '</div></div>' +
         '<button class="btn ghost" id="panel-close" aria-label="Close">' + OG.icon('close') + '</button></div>' +
 
       '<dl class="dl">' +
@@ -45,6 +117,8 @@
         '<a class="btn primary" href="' + OG.gmailCompose(r) + '" target="_blank" rel="noopener">' + OG.icon('mail') + 'Write an email</a>' +
       '</div><p class="small muted" style="margin-top:6px">"Write an email" opens a draft in Gmail. Nothing is sent until you press Send there.</p></div>' +
 
+      touchSection_(r) +
+
       (OG.CW ? '<div><div class="section-title">Call or WhatsApp</div>' +
         '<div class="btn-row" style="margin-bottom:10px">' +
           '<a class="btn" ' + (digits ? 'href="tel:' + OG.esc(loc.phone.replace(/[^\d+]/g, '')) + '"' : 'aria-disabled="true"') + '>' + OG.icon('phone') + 'Call</a>' +
@@ -61,6 +135,7 @@
       '<div><div class="section-title">Next step</div><div class="btn-row">' + OG.markButtons(r) + '</div></div>' : '');
 
     document.getElementById('panel-close').onclick = OG.closePanel;
+    bindTouches_(r);
     if (!OG.CW) return;
     var save = function () {
       OG.local.set(r.id, { phone: document.getElementById('p-phone').value.trim(), note: document.getElementById('p-note').value });
@@ -72,7 +147,7 @@
   }
 
   OG.openPanel = function (id) {
-    currentId = id; lastFocus = document.activeElement;
+    currentId = id; lastFocus = document.activeElement; pendingChannel = null;
     render();
     panel().classList.add('open'); panel().setAttribute('aria-hidden', 'false');
     document.getElementById('scrim').hidden = false;
@@ -85,7 +160,7 @@
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   };
   OG.refreshPanel = function () {
-    if (!currentId) return;
+    if (!currentId || pendingChannel) return; // don't wipe a half-filled follow-up form
     if (panel().contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; // don't interrupt typing
     render();
   };

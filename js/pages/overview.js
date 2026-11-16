@@ -32,8 +32,17 @@
         .map(function (r) { var n = OG.nextFollowUp(r); return OG.rowItem(r, OG.esc(r.subject), '<span class="pill st-due">Follow-up ' + (n ? n.n : (r.fu || 0) + 1) + '</span>'); });
       var bounced = rows.filter(OG.isBounced)
         .map(function (r) { return OG.rowItem(r, OG.esc(r.email) + ' · check the address', '<span class="pill st-bounced">Bounced</span>'); });
-      var recent = rows.slice().sort(function (a, b) { return (b.last || b.first || 0) - (a.last || a.first || 0); }).slice(0, 8)
-        .map(function (r) { return OG.rowItem(r, OG.esc(r.status), '<span class="small muted nowrap">' + OG.fmtRel(r.last || r.first) + '</span>'); });
+      // Recent activity: mail updates and your manual follow-ups (Email / LinkedIn / WhatsApp), newest first.
+      var byId = {}; rows.forEach(function (r) { byId[r.id] = r; });
+      var events = rows.map(function (r) { return { at: r.last || r.first || 0, r: r, sub: OG.esc(r.status) }; })
+        .concat((OG.state.touches || []).filter(function (t) { return byId[t.cid]; }).map(function (t) {
+          var m = OG.channelMeta(t.channel);
+          return { at: t.at, r: byId[t.cid], sub: '<span class="ch-tag ' + m.cls + '">' + OG.icon(m.icon) + m.short + '</span> You followed up' + (t.note ? ': ' + OG.esc(t.note) : '') };
+        }));
+      var recent = events.sort(function (a, b) { return b.at - a.at; }).slice(0, 8)
+        .map(function (e) { return OG.rowItem(e.r, e.sub, '<span class="small muted nowrap">' + OG.fmtRel(e.at) + '</span>'); });
+      var weekAgo = Date.now() - 7 * OG.DAY, tw = { Email: 0, LinkedIn: 0, WhatsApp: 0 }, twTotal = 0;
+      (OG.state.touches || []).forEach(function (t) { if (t.at >= weekAgo && tw[t.channel] !== undefined) { tw[t.channel]++; twTotal++; } });
 
       el.innerHTML =
         '<div class="page-head"><div><h1>Overview</h1><p class="muted">Everything at a glance. Click any contact to see the next step.</p></div>' +
@@ -45,7 +54,8 @@
           stat('Reply rate', m.rate + '%', 'replies ÷ mails tracked') +
           (OG.CW ? stat('Calls / WhatsApp planned', m.planned, '', '#/pipeline') : '') +
           stat('Follow-ups due', m.due, 'sent automatically', '#/followups') +
-          stat('Follow-ups sent this week', m.fuWeek, 'last 7 days') +
+          stat('Follow-ups sent this week', m.fuWeek, 'automatic emails, last 7 days') +
+          stat('Manual follow-ups', twTotal, 'last 7 days · LinkedIn ' + tw.LinkedIn + ' · WhatsApp ' + tw.WhatsApp + ' · Email ' + tw.Email, '#/contacts') +
           stat('To contact', OG.state.leads.filter(function (l) { return l.status === 'To contact'; }).length, 'added by you', '#/leads') +
         '</div>' +
         '<div class="grid two-col">' +

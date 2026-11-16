@@ -130,7 +130,8 @@
     download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.7-4.3L4 8M4 4v4h4M4 13a8 8 0 0 0 14.7 4.3L20 16M20 20v-4h-4"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
-    plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'
+    plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+    linkedin: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10v7M8 7v.01M12 17v-4a2 2 0 0 1 4 0v4M12 10v7"/>'
   };
   OG.icon = function (name) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[name] || '') + '</svg>';
@@ -145,5 +146,46 @@
     a.href = URL.createObjectURL(blob); a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  };
+})();
+
+/* ---------- Manual follow-ups ("touches") by channel ---------- */
+(function () {
+  var OG = window.OG;
+  // linkedin icon path for the shared icon set
+  OG.TOUCH_CHANNELS = [
+    { key: 'Email', label: 'Email', short: 'Email', icon: 'mail', cls: 'ch-email' },
+    { key: 'LinkedIn', label: 'LinkedIn', short: 'LinkedIn', icon: 'linkedin', cls: 'ch-linkedin' },
+    { key: 'WhatsApp', label: 'WhatsApp', short: 'WhatsApp', icon: 'chat', cls: 'ch-whatsapp' }
+  ];
+  OG.channelMeta = function (k) { return OG.TOUCH_CHANNELS.find(function (c) { return c.key === k; }) || OG.TOUCH_CHANNELS[0]; };
+
+  // Touches for one contact (by Follow-up Log thread id), newest first.
+  // Index by contact, rebuilt only when the list changes (keeps hundreds of contacts fast).
+  var idxFor = null, idx = {};
+  OG.touchesFor = function (id) {
+    var all = OG.state.touches || [];
+    if (idxFor !== all) {
+      idx = {}; idxFor = all;
+      all.forEach(function (t) { (idx[t.cid] = idx[t.cid] || []).push(t); });
+      Object.keys(idx).forEach(function (k) { idx[k].sort(function (a, b) { return b.at - a.at; }); });
+    }
+    return idx[id] || [];
+  };
+  // Counts per channel: { Email: n, LinkedIn: n, WhatsApp: n }. The outreach mail itself counts as Email.
+  OG.channelCounts = function (r) {
+    var c = { Email: 0, LinkedIn: 0, WhatsApp: 0 };
+    OG.touchesFor(r.id).forEach(function (t) { if (c[t.channel] !== undefined) c[t.channel]++; });
+    return c;
+  };
+  // Small tags: Email always (it started as an email), LinkedIn / WhatsApp once used. "×2" = manual follow-ups.
+  OG.channelTags = function (r, compact) {
+    var c = OG.channelCounts(r);
+    var list = OG.TOUCH_CHANNELS.filter(function (m) { return compact ? c[m.key] : (m.key === 'Email' || c[m.key]); });
+    if (!list.length) return '';
+    return '<span class="ch-tags">' + list.map(function (m) {
+      return '<span class="ch-tag ' + m.cls + '" title="' + m.label + (c[m.key] ? ': ' + c[m.key] + ' manual follow-up' + (c[m.key] > 1 ? 's' : '') : '') + '">' +
+        OG.icon(m.icon) + m.short + (c[m.key] ? ' ×' + c[m.key] : '') + '</span>';
+    }).join('') + '</span>';
   };
 })();

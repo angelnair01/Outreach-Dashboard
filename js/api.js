@@ -60,11 +60,11 @@
     fetchAll: function (token, since) {
       if (token === DEMO) {
         if (!OG._demo) { OG._demo = OG.demoRows(OG.sampleSize()); OG._demoLeads = OG.demoLeads(); }
-        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
+        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), touches: copy(OG._demoTouches || (OG._demoTouches = OG.demoTouches(OG._demo))), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
       }
       return call(token, null, { action: 'get', since: since || '' }).then(function (d) {
         if (d.unchanged) return { unchanged: true, account: d.account || null, ver: d.ver };
-        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], account: d.account || null, ver: d.ver || '' };
+        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], touches: Array.isArray(d.touches) ? d.touches : [], account: d.account || null, ver: d.ver || '' };
       });
     },
     addLead: function (token, lead) {
@@ -85,6 +85,18 @@
         return later({ ok: true });
       }
       return call(token, null, { action: 'contactedLead', id: id, channel: channel, contactedOn: contactedOn });
+    },
+    addTouch: function (token, touch) {
+      if (token === DEMO) {
+        var t = Object.assign({ id: 'T' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, touch, { at: touch.at || Date.now() });
+        (OG._demoTouches = OG._demoTouches || []).unshift(t);
+        return later({ ok: true, touch: Object.assign({}, t) });
+      }
+      return call(token, null, { action: 'addTouch', touch: touch });
+    },
+    removeTouch: function (token, id) {
+      if (token === DEMO) { OG._demoTouches = (OG._demoTouches || []).filter(function (t) { return t.id !== id; }); return later({ ok: true }); }
+      return call(token, null, { action: 'removeTouch', id: id });
     },
     removeLead: function (token, id) {
       if (token === DEMO) {

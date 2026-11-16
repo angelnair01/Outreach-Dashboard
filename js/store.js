@@ -8,6 +8,7 @@
     token: OG.store.get('og.token', ''),
     rows: [],
     leads: [],
+    touches: [],
     lastSync: 0,
     loading: false,
     error: ''
@@ -34,7 +35,7 @@
     if (!S.token || OG.isDemo()) return;
     var c = OG.store.get('og.cache', null);
     if (c && Array.isArray(c.rows) && c.user === OG.userEmail()) {
-      S.rows = normalize(c.rows); S.leads = c.leads || []; S.lastSync = c.at || 0; lastSig = c.sig || '';
+      S.rows = normalize(c.rows); S.leads = c.leads || []; S.touches = c.touches || []; S.lastSync = c.at || 0; lastSig = c.sig || '';
     }
   };
 
@@ -52,13 +53,13 @@
       S.lastSync = Date.now(); S.account = d.account || null;
       if (d.unchanged) { S.error = ''; return false; }
       lastVer = d.ver || ''; lastFullAt = Date.now();
-      var sig = JSON.stringify([d.rows, d.leads]);
+      var sig = JSON.stringify([d.rows, d.leads, d.touches]);
       var changed = sig !== lastSig || !!S.error;
       lastSig = sig;
       S.lastSync = Date.now(); S.error = ''; S.account = d.account || null;
       if (changed) {
-        S.leads = d.leads; S.rows = normalize(d.rows);
-        if (!OG.isDemo()) OG.store.set('og.cache', { rows: d.rows, leads: d.leads, at: S.lastSync, user: OG.userEmail(), sig: sig });
+        S.leads = d.leads; S.touches = d.touches || []; S.rows = normalize(d.rows);
+        if (!OG.isDemo()) OG.store.set('og.cache', { rows: d.rows, leads: d.leads, touches: d.touches, at: S.lastSync, user: OG.userEmail(), sig: sig });
       }
       return changed;
     }, function (e) {
@@ -108,7 +109,7 @@
 
   OG.signOut = function (silent, msg) {
     if (!silent) OG.auth.signOut();
-    S.token = ''; S.rows = []; S.leads = []; S.lastSync = 0;
+    S.token = ''; S.rows = []; S.leads = []; S.touches = []; S.lastSync = 0;
     OG.store.del('og.token'); OG.store.del('og.cache');
     clearInterval(timer);
     OG._signOutMsg = msg || '';

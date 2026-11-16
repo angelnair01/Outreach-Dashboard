@@ -53,7 +53,7 @@ function doPost(e) {
       // "Anything new since my last look?" If not, answer in a few milliseconds without reading the sheet.
       const ver = getVer_(me);
       if (body.since && String(body.since) === ver) return json_({ unchanged: true, ver: ver, account: accountInfo_(me) });
-      return json_({ rows: getData(me), leads: getLeads(me), user: me, account: accountInfo_(me), ver: ver });
+      return json_({ rows: getData(me), leads: getLeads(me), touches: getTouches(me), user: me, account: accountInfo_(me), ver: ver });
     }
     if (body.action === 'gmailStatus') return json_({ account: accountInfo_(me) });
     let res;
@@ -61,6 +61,8 @@ function doPost(e) {
     else if (body.action === 'contactedLead') res = updateLead(body.id, { status: 'Contacted', channel: body.channel, contactedOn: body.contactedOn }, me);
     else if (body.action === 'removeLead') res = updateLead(body.id, { status: 'Removed' }, me);
     else if (body.action === 'mark') res = markStage(body.id, body.stage, me);
+    else if (body.action === 'addTouch') res = addTouch(body.touch || {}, me);
+    else if (body.action === 'removeTouch') res = removeTouch(body.id, me);
     if (res) { if (res.ok) bumpVer_(me); return json_(res); }
     return json_({ error: 'unknown action' });
   } catch (err) {
@@ -424,6 +426,68 @@ function setAccount_(me, on, name) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- Manual follow-ups ("touches") by Email / LinkedIn / WhatsApp ---------- */
+// One row per follow-up you mark by hand on the dashboard. Later, LinkedIn / WhatsApp syncs can write here too.
+const TOUCHES_TAB = 'Touches';
+const TOUCHES_HEADER = ['Touch ID', 'Contact ID', 'Contact email', 'Contact name', 'Channel', 'Sent at', 'Note', 'Added by'];
+const TOUCH_CHANNELS = ['Email', 'LinkedIn', 'WhatsApp'];
+
+function touchesTab_(create) {
+  const ss = masterSheet_();
+  let sh = ss.getSheetByName(TOUCHES_TAB);
+  if (!sh && create) {
+    sh = ss.insertSheet(TOUCHES_TAB);
+    sh.getRange(1, 1, 1, TOUCHES_HEADER.length).setValues([TOUCHES_HEADER]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function getTouches(me) {
+  const sh = touchesTab_(false);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, TOUCHES_HEADER.length).getValues().filter(function (r) {
+    return String(r[0] || '').trim() && TOUCH_CHANNELS.indexOf(String(r[4])) >= 0 && String(r[7] || '').trim().toLowerCase() === me;
+  }).map(function (r) {
+    return { id: String(r[0]), cid: String(r[1]), email: String(r[2] || ''), name: String(r[3] || ''), channel: String(r[4]), at: toMs_(r[5]), note: String(r[6] || '') };
+  }).sort(function (a, b) { return b.at - a.at; });
+}
+
+function addTouch(input, me) {
+  const channel = TOUCH_CHANNELS.indexOf(input.channel) >= 0 ? input.channel : '';
+  const cid = clean_(input.cid, 200);
+  if (!channel) return { error: 'Choose Email, LinkedIn or WhatsApp.' };
+  if (!cid) return { error: 'Missing contact.' };
+  let at = Number(input.at) || Date.now();
+  if (at > Date.now() + 60000) at = Date.now(); // no future dates
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = touchesTab_(true);
+    const id = 'T' + Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
+    const t = { id: id, cid: cid, email: clean_(input.email, 200).toLowerCase(), name: clean_(input.name, 120), channel: channel, at: at, note: clean_(input.note, 500) };
+    sh.appendRow([id, t.cid, t.email, safeCell_(t.name), channel, new Date(at), safeCell_(t.note), me]);
+    return { ok: true, touch: t };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Undo: the row is kept but marked, so nothing is lost ("Removed (WhatsApp)").
+function removeTouch(id, me) {
+  id = String(id || '').trim();
+  const sh = touchesTab_(false);
+  if (!id || !sh || sh.getLastRow() < 2) return { error: 'not found' };
+  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, TOUCHES_HEADER.length).getValues();
+  for (let i = 0; i < vals.length; i++) {
+    if (String(vals[i][0]) !== id) continue;
+    if (String(vals[i][7] || '').trim().toLowerCase() !== me) return { error: 'not found' };
+    sh.getRange(i + 2, 5).setValue('Removed (' + vals[i][4] + ')');
+    return { ok: true, id: id };
+  }
+  return { error: 'not found' };
 }
 
 /* ---------- "has anything changed?" version per person ---------- */
