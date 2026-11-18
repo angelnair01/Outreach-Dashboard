@@ -1,10 +1,10 @@
-/* Pipeline: three columns by what needs doing (Replied / Waiting / Closed), company-first cards,
-   filters, and a "By company" view. Automatic follow-ups need no column: they go out by themselves. */
+/* Pipeline: three columns by what needs doing (Replied / Waiting / Closed), company-first cards
+   and filters. Automatic follow-ups need no column: they go out by themselves. */
 (function () {
   var OG = window.OG;
-  var f = { view: 'board', q: '', company: 'all', period: 'all', channel: 'any' };
-  var shown = { replied: 20, waiting: 12, closed: 5, companies: 20 };
-  var STEP = { replied: 20, waiting: 24, closed: 20, companies: 20 };
+  var f = { q: '', company: 'all', period: 'all', channel: 'any' };
+  var shown = { replied: 20, waiting: 12, closed: 5 };
+  var STEP = { replied: 20, waiting: 24, closed: 20 };
 
   var COLS = [
     { key: 'replied', title: 'Replied: take it forward', hint: 'They wrote back. Set up a call or the next step.', tone: 'replied',
@@ -34,12 +34,6 @@
     var n = OG.nextFollowUp(r);
     if (n) return 'Follow-up ' + n.n + ' of ' + OG.MAX_FU + ' ' + (n.due ? 'goes out today' : inDays(n.when));
     return 'Final follow-up sent · closes ' + inDays(nextAt(r));
-  }
-  function statusOf(r) {
-    if (OG.isBounced(r)) return { text: 'Bounced', cls: 'st-bounced' };
-    if (COLS[0].test(r)) return { text: 'Replied', cls: 'st-replied' };
-    if (r.stage === 'stopped') return { text: 'No reply', cls: 'st-stopped' };
-    return { text: 'Waiting', cls: 'st-waiting' };
   }
   // LinkedIn / WhatsApp icons when you followed up there. No counts on screen (they're in the tooltip).
   function channelIcons(r) {
@@ -89,38 +83,12 @@
     }).join('') + '</div>';
   }
 
-  function byCompany(rows) {
-    var groups = {};
-    rows.forEach(function (r) { var k = OG.companyLabel(r); (groups[k] = groups[k] || []).push(r); });
-    var list = Object.keys(groups).map(function (k) {
-      var g = groups[k];
-      return { name: k, rows: g, replied: g.filter(COLS[0].test).length, waiting: g.filter(COLS[1].test).length, closed: g.filter(COLS[2].test).length,
-        latest: Math.max.apply(null, g.map(function (r) { return r.last || r.first || 0; })) };
-    }).sort(function (a, b) { return (b.replied > 0) - (a.replied > 0) || b.latest - a.latest; });
-    var vis = list.slice(0, shown.companies);
-    if (!vis.length) return '<div class="card empty">No contacts match these filters.</div>';
-    return vis.map(function (g) {
-      var bits = [g.replied ? '<span class="pill st-replied">' + g.replied + ' replied</span>' : '',
-        g.waiting ? '<span class="pill st-waiting">' + g.waiting + ' waiting</span>' : '',
-        g.closed ? '<span class="pill st-stopped">' + g.closed + ' closed</span>' : ''].join('');
-      return '<section class="card cogroup"><header class="cog-head"><span class="pav">' + OG.esc(OG.initials(g.name)) + '</span>' +
-        '<div class="cog-title"><h2>' + OG.esc(g.name) + '</h2><span class="small muted">' + g.rows.length + ' contact' + (g.rows.length > 1 ? 's' : '') + '</span></div>' +
-        '<div class="cog-pills">' + bits + '</div></header><ul class="list">' +
-        g.rows.sort(function (a, b) { return (b.last || b.first || 0) - (a.last || a.first || 0); }).map(function (r) {
-          var s = statusOf(r);
-          return '<li><button class="row-btn" data-open="' + OG.esc(r.id) + '"><div class="row-main"><div class="row-title">' + OG.esc(r.name || r.email) + '</div>' +
-            '<div class="row-sub">' + OG.esc(r.subject || '') + '</div></div><span class="pch">' + channelIcons(r) + '</span>' +
-            '<span class="pill ' + s.cls + '">' + s.text + '</span><span class="small muted nowrap">' + OG.fmtDate(r.last || r.first) + '</span></button></li>';
-        }).join('') + '</ul></section>';
-    }).join('') + (list.length > vis.length ? '<div class="more-row"><button class="btn" data-more="companies">Show ' + Math.min(STEP.companies, list.length - vis.length) + ' more companies</button></div>' : '');
-  }
-
   function body(el) {
     var rows = filtered();
     var rep = rows.filter(COLS[0].test).length, wait = rows.filter(COLS[1].test).length, clo = rows.filter(COLS[2].test).length;
     el.querySelector('#p-summary').innerHTML = '<strong>' + rep + '</strong> to take forward · ' + wait + ' waiting · ' + clo + ' closed' +
       (rows.length !== OG.state.rows.length ? ' <span class="muted">(filtered)</span>' : '');
-    el.querySelector('#p-body').innerHTML = f.view === 'board' ? board(rows) : byCompany(rows);
+    el.querySelector('#p-body').innerHTML = board(rows);
     el.querySelector('#p-clear').hidden = !(f.q || f.company !== 'all' || f.period !== 'all' || f.channel !== 'any');
   }
 
@@ -132,10 +100,9 @@
       var companies = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
       if (f.company !== 'all' && !counts[f.company]) f.company = 'all';
       var opts = function (list, cur) { return list.map(function (o) { return '<option value="' + OG.esc(o.key) + '"' + (o.key === cur ? ' selected' : '') + '>' + OG.esc(o.label) + '</option>'; }).join(''); };
-      var seg = function (k, label, icon) { return '<button data-view="' + k + '" aria-pressed="' + (f.view === k) + '">' + OG.icon(icon) + label + '</button>'; };
 
       el.innerHTML = '<div class="page-head"><div><h1>Pipeline</h1><p class="muted" id="p-summary"></p></div>' +
-          '<div class="seg pview">' + seg('board', 'Board', 'pipeline') + seg('company', 'By company', 'contacts') + '</div></div>' +
+          '</div>' +
         '<div class="toolbar ptools">' +
           '<label class="search-box">' + OG.icon('search') + '<input class="input" id="p-q" type="search" placeholder="Search company, person or subject" value="' + OG.esc(f.q) + '" aria-label="Search pipeline"></label>' +
           '<select class="select" id="p-company" aria-label="Company">' + opts([{ key: 'all', label: 'All companies' }].concat(companies.map(function (c) { return { key: c, label: c + ' (' + counts[c] + ')' }; })), f.company) + '</select>' +
@@ -150,9 +117,6 @@
       el.querySelector('#p-period').addEventListener('change', function (e) { f.period = e.target.value; body(el); });
       el.querySelector('#p-channel').addEventListener('change', function (e) { f.channel = e.target.value; body(el); });
       el.querySelector('#p-clear').addEventListener('click', function () { f.q = ''; f.company = 'all'; f.period = 'all'; f.channel = 'any'; OG.pages.pipeline.render(el); });
-      el.querySelectorAll('[data-view]').forEach(function (b) {
-        b.addEventListener('click', function () { f.view = b.getAttribute('data-view'); OG.pages.pipeline.render(el); });
-      });
       if (!el._ogPipeBound) { // "show more" buttons: attach once per page element
         el._ogPipeBound = true;
         el.addEventListener('click', function (e) {
