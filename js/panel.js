@@ -183,12 +183,17 @@
     document.getElementById('p-note').addEventListener('input', save);
   }
 
-  OG.openPanel = function (id) {
+  OG.openPanel = function (id, opts) {
     currentId = id; lastFocus = document.activeElement; pendingChannel = null;
     render();
     panel().classList.add('open'); panel().setAttribute('aria-hidden', 'false');
     document.getElementById('scrim').hidden = false;
-    setTimeout(function () { var c = document.getElementById('panel-close'); if (c) c.focus(); }, 50);
+    setTimeout(function () {
+      // Opened from "+ Add company" on a card: go straight to the company box
+      var edit = opts && opts.editCompany && document.getElementById('pn-company-edit');
+      if (edit) { edit.click(); return; }
+      var c = document.getElementById('panel-close'); if (c) c.focus();
+    }, 50);
   };
   OG.closePanel = function () {
     currentId = null; OG._formOpen = false;

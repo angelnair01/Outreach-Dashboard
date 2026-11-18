@@ -219,6 +219,9 @@
     var email = String(r.email || '').toLowerCase();
     var saved = (OG.state.companies || {})[email];
     if (saved) return { name: saved, set: true };
+    // Organisation typed on the Add & log page for this email address
+    var lead = (OG.state.leads || []).find(function (l) { return l.org && String(l.email || '').toLowerCase() === email; });
+    if (lead) return { name: lead.org, set: true, fromLead: true };
     var g = OG.guessCompany(email);
     if (g) return { name: g, guessed: true };
     return { name: '', none: true };

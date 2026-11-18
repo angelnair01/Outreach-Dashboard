@@ -43,13 +43,16 @@
     }).join('');
   }
 
+  var NO_CO = 'No company yet';
+  function coKey(r) { return OG.companyOf(r).name || NO_CO; }
+
   function filtered() {
     var q = f.q.toLowerCase();
     var from = f.period === 'all' ? -Infinity : Date.now() - Number(f.period) * OG.DAY;
     return OG.state.rows.filter(function (r) {
-      var co = OG.companyLabel(r);
+      var co = coKey(r);
       if (f.company !== 'all' && co !== f.company) return false;
-      if (q && (co + ' ' + r.name + ' ' + r.email + ' ' + r.subject).toLowerCase().indexOf(q) < 0) return false;
+      if (q && (OG.companyLabel(r) + ' ' + r.name + ' ' + r.email + ' ' + r.subject).toLowerCase().indexOf(q) < 0) return false;
       if (r.first && r.first < from) return false;
       if (f.channel !== 'any' && !OG.channelCounts(r)[f.channel]) return false;
       return true;
@@ -57,13 +60,17 @@
   }
 
   function card(r, col) {
-    var c = OG.companyOf(r), label = OG.companyLabel(r);
-    var who = c.name ? [r.name || r.email, r.subject].filter(Boolean).join(' · ') : (r.subject || '');
+    var c = OG.companyOf(r);
+    // Headline is always the company. Unknown (e.g. a Gmail address): "+ Add company", person underneath.
+    var who = [r.name || r.email, r.subject].filter(Boolean).join(' · ');
+    var head = c.name
+      ? '<span class="pav">' + OG.esc(OG.initials(c.name)) + '</span><span class="pco">' + OG.esc(c.name) + '</span>'
+      : '<span class="pav pav-none">' + OG.icon('plus') + '</span><span class="pco pco-none" data-addco="' + OG.esc(r.id) + '" title="Add the company for this contact">Add company</span>';
     var meta = col.key === 'replied' ? 'Replied ' + OG.fmtRel(r.last)
       : col.key === 'waiting' ? waitingLine(r)
       : (OG.isBounced(r) ? 'Bounced' : 'No reply') + ' · ' + OG.fmtDate(r.last || r.first);
     return '<button class="pcard tone-' + col.tone + '" data-open="' + OG.esc(r.id) + '">' +
-      '<span class="pcard-top"><span class="pav">' + OG.esc(OG.initials(label)) + '</span><span class="pco">' + OG.esc(label) + '</span></span>' +
+      '<span class="pcard-top">' + head + '</span>' +
       (who ? '<span class="pwho">' + OG.esc(who) + '</span>' : '') +
       (col.key === 'replied' && r.snippet ? '<span class="psnip">“' + OG.esc(r.snippet.slice(0, 110)) + (r.snippet.length > 110 ? '…' : '') + '”</span>' : '') +
       '<span class="pmeta"><span>' + meta + '</span><span class="pch">' + channelIcons(r) + '</span></span></button>';
@@ -96,7 +103,7 @@
     title: 'Pipeline',
     render: function (el) {
       var all = OG.state.rows, counts = {};
-      all.forEach(function (r) { var k = OG.companyLabel(r); counts[k] = (counts[k] || 0) + 1; });
+      all.forEach(function (r) { var k = coKey(r); counts[k] = (counts[k] || 0) + 1; });
       var companies = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
       if (f.company !== 'all' && !counts[f.company]) f.company = 'all';
       var opts = function (list, cur) { return list.map(function (o) { return '<option value="' + OG.esc(o.key) + '"' + (o.key === cur ? ' selected' : '') + '>' + OG.esc(o.label) + '</option>'; }).join(''); };
@@ -120,6 +127,8 @@
       if (!el._ogPipeBound) { // "show more" buttons: attach once per page element
         el._ogPipeBound = true;
         el.addEventListener('click', function (e) {
+          var add = e.target.closest('[data-addco]');
+          if (add) { e.stopPropagation(); OG.openPanel(add.getAttribute('data-addco'), { editCompany: true }); return; }
           var m = e.target.closest('[data-more]');
           if (!m) return;
           var k = m.getAttribute('data-more'), y = window.scrollY;
