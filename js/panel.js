@@ -13,6 +13,41 @@
     return b.join('');
   };
 
+  /* ---- Company: guessed from the email, or set by you (saved in the sheet's Companies tab) ---- */
+  function companyCell_(r) {
+    var c = OG.companyOf(r);
+    return (c.name ? '<strong>' + OG.esc(c.name) + '</strong>' + (c.guessed ? ' <span class="muted small">(from email)</span>' : '') : '<span class="muted">Not set</span>') +
+      ' <button class="btn ghost small" id="pn-company-edit">' + (c.name ? 'Edit' : 'Add') + '</button>';
+  }
+
+  function bindCompany_(r) {
+    var editBtn = document.getElementById('pn-company-edit');
+    if (!editBtn) return;
+    editBtn.onclick = function () {
+      var cell = document.getElementById('pn-company');
+      cell.innerHTML = '<div class="company-edit"><input class="input" id="pn-company-in" maxlength="120" placeholder="e.g. Lakeside School" value="' + OG.esc(OG.companyOf(r).name) + '">' +
+        '<button class="btn primary small" id="pn-company-save">Save</button><button class="btn ghost small" id="pn-company-cancel">Cancel</button></div>' +
+        '<div class="small muted">Used for every contact with this email address.</div>';
+      var input = document.getElementById('pn-company-in');
+      input.focus(); input.select();
+      var save = function () {
+        var name = input.value.trim();
+        var btn = document.getElementById('pn-company-save'); btn.disabled = true; btn.textContent = 'Saving…';
+        OG.api.setCompany(OG.state.token, r.email, name).then(function (res) {
+          if (res && res.error) throw new Error(res.error);
+          var map = Object.assign({}, OG.state.companies || {});
+          if (name) map[String(r.email).toLowerCase()] = name; else delete map[String(r.email).toLowerCase()];
+          OG.state.companies = map;
+          OG.toast(name ? 'Company saved: ' + name : 'Company cleared.');
+          OG.emit(); render();
+        }).catch(function (e) { btn.disabled = false; btn.textContent = 'Save'; OG.toast('Could not save: ' + (e.message || e)); });
+      };
+      document.getElementById('pn-company-save').onclick = save;
+      document.getElementById('pn-company-cancel').onclick = function () { render(); };
+      input.onkeydown = function (e) { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.stopPropagation(); render(); } };
+    };
+  }
+
   /* ---- Manual follow-ups: "I followed up by Email / LinkedIn / WhatsApp" ---- */
   var pendingChannel = null; // channel whose small form is open
 
@@ -102,6 +137,7 @@
         '<button class="btn ghost" id="panel-close" aria-label="Close">' + OG.icon('close') + '</button></div>' +
 
       '<dl class="dl">' +
+        '<dt>Company</dt><dd id="pn-company">' + companyCell_(r) + '</dd>' +
         '<dt>Subject</dt><dd>' + OG.esc(r.subject || '—') + '</dd>' +
         '<dt>First sent</dt><dd>' + OG.fmtDateTime(r.first) + '</dd>' +
         '<dt>Follow-ups sent</dt><dd>' + (r.fu || 0) + ' of ' + OG.MAX_FU + '</dd>' +
@@ -136,6 +172,7 @@
 
     document.getElementById('panel-close').onclick = OG.closePanel;
     bindTouches_(r);
+    bindCompany_(r);
     if (!OG.CW) return;
     var save = function () {
       OG.local.set(r.id, { phone: document.getElementById('p-phone').value.trim(), note: document.getElementById('p-note').value });

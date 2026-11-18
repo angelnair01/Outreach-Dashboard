@@ -186,7 +186,52 @@
     if (!list.length) return '';
     return '<span class="ch-tags">' + list.map(function (m) {
       return '<span class="ch-tag ' + m.cls + '" title="' + m.label + (c[m.key] ? ': ' + c[m.key] + ' manual follow-up' + (c[m.key] > 1 ? 's' : '') : '') + '">' +
-        OG.icon(m.icon) + m.short + (c[m.key] ? ' ×' + c[m.key] : '') + '</span>';
+        OG.icon(m.icon) + m.short + '</span>'; // no ×2 counts on screen; the count is in the tooltip
     }).join('') + '</span>';
+  };
+})();
+
+/* ---------- Company per contact ---------- */
+(function () {
+  var OG = window.OG;
+  var PERSONAL = ['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.in', 'outlook.com', 'hotmail.com', 'live.com',
+    'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'rediffmail.com', 'ymail.com', 'zoho.com', 'gmx.com'];
+  // endings that are not the organisation's name (example.com -> "example", school.edu.in -> "school")
+  var SUFFIX = /\.(com|org|net|edu|gov|ac|co|in|uk|us|io|ai|info|biz|example|school|college|university|res|nic|ind|int|me)$/i;
+
+  function titleCase(s) {
+    return s.replace(/[-_.]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  // "priya@mail.lakesideschool.edu.in" -> "Lakesideschool"
+  OG.guessCompany = function (email) {
+    var domain = String(email || '').toLowerCase().split('@')[1] || '';
+    if (!domain || PERSONAL.indexOf(domain) >= 0) return '';
+    var d = domain;
+    for (var i = 0; i < 3 && SUFFIX.test(d) && d.indexOf('.') > 0; i++) d = d.replace(SUFFIX, '');
+    var parts = d.split('.');
+    var name = parts[parts.length - 1] || '';
+    return name.length <= 4 ? name.toUpperCase() : titleCase(name); // short names are usually acronyms (IITB)
+  };
+
+  // { name, set: true if you saved it, guessed: true if from the email, none: true if unknown }
+  OG.companyOf = function (r) {
+    var email = String(r.email || '').toLowerCase();
+    var saved = (OG.state.companies || {})[email];
+    if (saved) return { name: saved, set: true };
+    var g = OG.guessCompany(email);
+    if (g) return { name: g, guessed: true };
+    return { name: '', none: true };
+  };
+
+  // What to show as the card headline: company, else the person's name, else the email.
+  OG.companyLabel = function (r) {
+    var c = OG.companyOf(r);
+    return c.name || r.name || r.email || '(no name)';
+  };
+
+  OG.initials = function (s) {
+    var w = String(s || '?').replace(/[^\w\s]/g, ' ').trim().split(/\s+/);
+    return ((w[0] || '?')[0] + (w.length > 1 ? w[1][0] : '')).toUpperCase();
   };
 })();

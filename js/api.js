@@ -60,11 +60,11 @@
     fetchAll: function (token, since) {
       if (token === DEMO) {
         if (!OG._demo) { OG._demo = OG.demoRows(OG.sampleSize()); OG._demoLeads = OG.demoLeads(); }
-        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), touches: copy(OG._demoTouches || (OG._demoTouches = OG.demoTouches(OG._demo))), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
+        return later({ rows: copy(OG._demo), leads: copy(OG._demoLeads), touches: copy(OG._demoTouches || (OG._demoTouches = OG.demoTouches(OG._demo))), companies: Object.assign({}, OG._demoCompanies || {}), account: { connected: true, name: 'Demo', lastSync: OG._demoSync || Date.now() - 25000 } }, 300);
       }
       return call(token, null, { action: 'get', since: since || '' }).then(function (d) {
         if (d.unchanged) return { unchanged: true, account: d.account || null, ver: d.ver };
-        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], touches: Array.isArray(d.touches) ? d.touches : [], account: d.account || null, ver: d.ver || '' };
+        return { rows: Array.isArray(d.rows) ? d.rows : [], leads: Array.isArray(d.leads) ? d.leads : [], touches: Array.isArray(d.touches) ? d.touches : [], companies: d.companies || {}, account: d.account || null, ver: d.ver || '' };
       });
     },
     addLead: function (token, lead) {
@@ -97,6 +97,10 @@
     removeTouch: function (token, id) {
       if (token === DEMO) { OG._demoTouches = (OG._demoTouches || []).filter(function (t) { return t.id !== id; }); return later({ ok: true }); }
       return call(token, null, { action: 'removeTouch', id: id });
+    },
+    setCompany: function (token, email, company) {
+      if (token === DEMO) { (OG._demoCompanies = OG._demoCompanies || {})[String(email).toLowerCase()] = company; return later({ ok: true }); }
+      return call(token, null, { action: 'setCompany', email: email, company: company });
     },
     removeLead: function (token, id) {
       if (token === DEMO) {

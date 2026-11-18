@@ -53,7 +53,7 @@ function doPost(e) {
       // "Anything new since my last look?" If not, answer in a few milliseconds without reading the sheet.
       const ver = getVer_(me);
       if (body.since && String(body.since) === ver) return json_({ unchanged: true, ver: ver, account: accountInfo_(me) });
-      return json_({ rows: getData(me), leads: getLeads(me), touches: getTouches(me), user: me, account: accountInfo_(me), ver: ver });
+      return json_({ rows: getData(me), leads: getLeads(me), touches: getTouches(me), companies: getCompanies(me), user: me, account: accountInfo_(me), ver: ver });
     }
     if (body.action === 'gmailStatus') return json_({ account: accountInfo_(me) });
     let res;
@@ -63,6 +63,7 @@ function doPost(e) {
     else if (body.action === 'mark') res = markStage(body.id, body.stage, me);
     else if (body.action === 'addTouch') res = addTouch(body.touch || {}, me);
     else if (body.action === 'removeTouch') res = removeTouch(body.id, me);
+    else if (body.action === 'setCompany') res = setCompany(body.email, body.company, me);
     if (res) { if (res.ok) bumpVer_(me); return json_(res); }
     return json_({ error: 'unknown action' });
   } catch (err) {
@@ -496,6 +497,56 @@ function removeTouch(id, me) {
     return { ok: true, id: id };
   }
   return { error: 'not found' };
+}
+
+/* ---------- Company per contact (set on the dashboard) ---------- */
+// The dashboard guesses the company from the email address; this tab stores the ones you set or correct.
+const COMPANIES_TAB = 'Companies';
+const COMPANIES_HEADER = ['Contact email', 'Company', 'Added by', 'Updated'];
+
+function companiesTab_(create) {
+  const ss = masterSheet_();
+  let sh = ss.getSheetByName(COMPANIES_TAB);
+  if (!sh && create) {
+    sh = ss.insertSheet(COMPANIES_TAB);
+    sh.getRange(1, 1, 1, COMPANIES_HEADER.length).setValues([COMPANIES_HEADER]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// { "person@school.edu": "Lakeside School", ... } for this person's own entries.
+function getCompanies(me) {
+  const sh = companiesTab_(false), out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues().forEach(function (r) {
+    const email = String(r[0] || '').trim().toLowerCase();
+    if (email && String(r[2] || '').trim().toLowerCase() === me) out[email] = String(r[1] || '');
+  });
+  return out;
+}
+
+function setCompany(email, company, me) {
+  email = clean_(email, 200).toLowerCase();
+  company = clean_(company, 120);
+  if (!/^[^\s@]+@[^\s@]+$/.test(email)) return { error: 'Missing contact email.' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = companiesTab_(true);
+    const n = sh.getLastRow() - 1;
+    const vals = n > 0 ? sh.getRange(2, 1, n, 3).getValues() : [];
+    for (let i = 0; i < vals.length; i++) {
+      if (String(vals[i][0]).trim().toLowerCase() === email && String(vals[i][2]).trim().toLowerCase() === me) {
+        sh.getRange(i + 2, 2, 1, 3).setValues([[safeCell_(company), me, new Date()]]);
+        return { ok: true, email: email, company: company };
+      }
+    }
+    sh.appendRow([email, safeCell_(company), me, new Date()]);
+    return { ok: true, email: email, company: company };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* ---------- "has anything changed?" version per person ---------- */
