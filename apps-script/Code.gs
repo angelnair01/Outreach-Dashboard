@@ -37,7 +37,7 @@ function doPost(e) {
     if (/^sync/.test(String(body.action || ''))) {
       const syncer = checkAccessToken_(body.accessToken);
       if (syncer.error) return json_(syncer);
-      if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email, body.ids), account: accountInfo_(syncer.email) });
+      if (body.action === 'syncPull') return json_({ rows: syncPull_(syncer.email, body.ids), account: accountInfo_(syncer.email), companies: companiesFor_(syncer.email) });
       if (body.action === 'syncPush') return json_(syncPush_(syncer.email, body.rows || [], body.error));
       if (body.action === 'syncConnect') return json_(setAccount_(syncer.email, true, body.name));
       if (body.action === 'syncDisconnect') return json_(setAccount_(syncer.email, false));
@@ -523,6 +523,15 @@ function getCompanies(me) {
     const email = String(r[0] || '').trim().toLowerCase();
     if (email && String(r[2] || '').trim().toLowerCase() === me) out[email] = String(r[1] || '');
   });
+  return out;
+}
+
+// Companies for the follow-up emails: Organisation typed on "Add & log", overridden by ones set on the dashboard.
+function companiesFor_(me) {
+  const out = {};
+  getLeads(me).forEach(function (l) { if (l.email && l.org) out[String(l.email).toLowerCase()] = l.org; });
+  const set = getCompanies(me);
+  Object.keys(set).forEach(function (k) { if (set[k]) out[k] = set[k]; });
   return out;
 }
 

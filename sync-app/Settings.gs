@@ -14,10 +14,28 @@ const SEND_FROM_HOUR = 9;      // only send between these hours (time zone in ap
 const SEND_TO_HOUR = 19;
 const MAX_AGE_DAYS_FOR_NEW = 30; // a thread first seen when already older than this is logged but never followed up
 
-// {{name}} = person you mailed (first name), {{sender}} = your name (asked when you connect)
+// Follow-up emails, sent as a reply in the same Gmail thread (so the subject stays the same).
+//   {{name}}    = first name of the person you mailed ("there" if unknown)
+//   {{company}} = their company: the one set on the dashboard, else the Organisation from "Add & log",
+//                 else a guess from their email address, else "your organisation"
+//   {{sender}}  = your name (asked when you connect your Gmail)
+// Write each email as plain text; empty lines become paragraphs.
 const FOLLOWUP_TEXT = [
-  'Hi {{name}},\n\nJust following up on my earlier email in case it got buried. Would love to hear your thoughts.\n\nThanks,\n{{sender}}',
-  'Hi {{name}},\n\nLast nudge from my side. If this is not relevant, no problem at all, just let me know.\n\nThanks,\n{{sender}}'
+  // Follow-up 1 (final, approved)
+  'Hi {{name}},\n\n' +
+  'I hope you\'re doing well. I wanted to follow up on my email regarding a potential partnership between OpenGrad and {{company}}.\n\n' +
+  'I believe there is a strong synergy between {{company}}\'s work and OpenGrad\'s mission, and I would welcome the opportunity to explore how we could create value together.\n\n' +
+  'I\'d be glad to set up a brief call at your convenience.\n' +
+  'Looking forward to hearing from you.\n\n' +
+  'Best regards,\n{{sender}}\nOpenGrad Foundation',
+
+  // Follow-up 2 (draft, waiting for approval)
+  'Hi {{name}},\n\n' +
+  'I\'m following up once more on my note about a partnership between OpenGrad and {{company}}. I understand how busy things can get.\n\n' +
+  'If this is of interest, I\'d be happy to share a short overview or arrange a quick call at a time that works for you. ' +
+  'If someone else at {{company}} would be better placed to discuss this, I\'d be grateful if you could point me in the right direction.\n\n' +
+  'Thank you for your time, and I look forward to hearing from you.\n\n' +
+  'Best regards,\n{{sender}}\nOpenGrad Foundation'
 ];
 
 const OUTREACH_LABEL = 'Outreach';

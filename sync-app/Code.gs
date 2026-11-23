@@ -140,7 +140,7 @@ function syncMine_(manual, forceFull) {
         else if (!inSendWindow_(new Date(now)) || sends >= MAX_SENDS_PER_RUN || sentToday_() >= MAX_PER_DAY) {
           status = 'Follow-up ' + n + ' due (waiting for send window)';
         } else {
-          sendFollowUp_(thread, a, n, senderName);
+          sendFollowUp_(thread, a, n, senderName, pulled.companies);
           sentToday_(1); sends++; fu = n; last = Date.now();
           status = 'Follow-up ' + n + ' sent';
         }
@@ -209,12 +209,50 @@ function analyze_(thread, myAddrs) {
   };
 }
 
-// Same way of sending as the original script: a reply inside the same Gmail thread.
-function sendFollowUp_(thread, a, n, senderName) {
+// The follow-up text with {{name}}, {{company}} and {{sender}} filled in.
+function followUpText_(n, a, senderName, companies) {
   const tpl = FOLLOWUP_TEXT[Math.min(n, FOLLOWUP_TEXT.length) - 1];
-  const firstName = (a.name || '').split(/\s+/)[0] || 'there';
-  thread.reply(tpl.replace(/\{\{name\}\}/g, firstName).replace(/\{\{sender\}\}/g, senderName));
+  let first = String(a.name || '').trim().split(/\s+/)[0] || '';
+  if (!first || /@/.test(first)) first = 'there';
+  else first = first.charAt(0).toUpperCase() + first.slice(1).toLowerCase(); // "RASHI" -> "Rashi"
+  const company = (companies || {})[String(a.email || '').toLowerCase()] || guessCompany_(a.email);
+  let text = tpl;
+  if (!company) {
+    // No company known: keep the sentences natural.
+    text = text.replace(/\{\{company\}\}'s/g, 'your organisation\'s').replace(/at \{\{company\}\}/g, 'in your organisation')
+      .replace(/\{\{company\}\}/g, 'your organisation');
+  }
+  return text.replace(/\{\{company\}\}/g, company).replace(/\{\{name\}\}/g, first).replace(/\{\{sender\}\}/g, senderName);
+}
+
+// A reply inside the same Gmail thread: plain text plus a neatly formatted version (paragraphs, line breaks).
+function sendFollowUp_(thread, a, n, senderName, companies) {
+  const text = followUpText_(n, a, senderName, companies);
+  const esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  const html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#202124">' +
+    text.split(/\n{2,}/).map(function (p) { return '<p style="margin:0 0 12px">' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>';
+  thread.reply(text, { htmlBody: html });
   Utilities.sleep(1500);
+}
+
+// "anna@lakesideschool.edu" -> "Lakesideschool"; personal addresses (gmail etc.) -> "" (same rule as the dashboard)
+function guessCompany_(email) {
+  const PERSONAL = ['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.in', 'outlook.com', 'hotmail.com', 'live.com',
+    'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'rediffmail.com', 'ymail.com', 'zoho.com', 'gmx.com'];
+  const SUFFIX = /\.(com|org|net|edu|gov|ac|co|in|uk|us|io|ai|info|biz|example|school|college|university|res|nic|ind|int|me)$/i;
+  let d = String(email || '').toLowerCase().split('@')[1] || '';
+  if (!d || PERSONAL.indexOf(d) >= 0) return '';
+  for (let i = 0; i < 3 && SUFFIX.test(d) && d.indexOf('.') > 0; i++) d = d.replace(SUFFIX, '');
+  const parts = d.split('.');
+  const name = parts[parts.length - 1] || '';
+  if (name.length <= 4) return name.toUpperCase();
+  return name.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+
+// Preview the follow-up emails in the Execution log (run this from the editor; nothing is sent).
+function previewFollowUps() {
+  const samples = [{ name: 'Priya Menon', email: 'priya@lakesideschool.edu' }, { name: 'RASHI SUREKA', email: 'rashi@gmail.com' }];
+  [1, 2].forEach(function (n) { samples.forEach(function (s) { Logger.log('--- Follow-up ' + n + ' to ' + s.email + ' ---\n' + followUpText_(n, s, 'Angel Nair', {})); }); });
 }
 
 function moveLabel_(thread, toName, label) {
