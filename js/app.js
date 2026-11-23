@@ -2,12 +2,11 @@
 (function () {
   var OG = window.OG, S = OG.state;
   var NAV = [
-    { key: 'overview', label: 'Overview', icon: 'overview' },
+    { key: 'today', label: 'Today', icon: 'overview' },
     { key: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
     { key: 'replies', label: 'Replies', icon: 'replies' },
-    { key: 'followups', label: 'Follow-ups', icon: 'followups' },
     { key: 'contacts', label: 'Contacts', icon: 'contacts' },
-    { key: 'leads', label: 'Add & log', icon: 'plus' },
+    { key: 'leads', label: 'Add outreach', short: 'Add', icon: 'plus' },
     { key: 'settings', label: 'Settings', icon: 'settings' }
   ];
   var $ = function (id) { return document.getElementById(id); };
@@ -15,20 +14,25 @@
 
   function route() {
     var k = (location.hash.match(/^#\/(\w+)/) || [])[1];
-    return OG.pages[k] ? k : 'overview';
+    if (k === 'overview') k = 'today'; // old links
+    return OG.pages[k] ? k : 'today';
   }
 
   /* ---------- sign-in screen ---------- */
   function showSignin() {
     $('app').hidden = true; $('signin').hidden = false;
     var msg = OG._signOutMsg; OG._signOutMsg = '';
-    $('signin').innerHTML = '<div class="card"><div class="brand" style="padding:0"><span class="brand-mark"></span>' + OG.esc((window.APP_CONFIG || {}).APP_NAME || 'Outreach') + '</div>' +
-      '<p class="muted" style="margin-top:12px">Sign in with your Gmail to see your own outreach, replies and follow-ups.</p>' +
-      '<div id="si-google" style="margin:18px 0 6px;min-height:44px"></div>' +
+    // Sample data is only offered when the address ends in ?demo (for showing the dashboard to others).
+    var demo = /[?&]demo\b/.test(location.search);
+    $('signin').innerHTML = '<div class="signin-card">' +
+      '<div class="signin-logo">' + OG.icon('send') + '</div>' +
+      '<h1>' + OG.esc((window.APP_CONFIG || {}).APP_NAME || 'Outreach') + '</h1>' +
+      '<p class="muted">Track your outreach emails, replies and follow-ups in one place. Sign in with the Gmail you send outreach from.</p>' +
+      '<div id="si-google" class="si-google"></div>' +
       '<div class="small muted" id="si-status" aria-live="polite"></div>' +
       '<div class="error" id="si-err" role="alert">' + OG.esc(msg) + '</div>' +
-      '<p class="small muted" style="margin-top:16px">Just looking? <a href="#" data-sample="46">Try it with sample data</a>' +
-      ' (load test: <a href="#" data-sample="300">300 mails</a> · <a href="#" data-sample="700">700 mails</a>) · <a href="privacy.html">Privacy</a></p></div>';
+      '<p class="signin-foot small muted">' + (demo ? '<a href="#" data-sample="46">View sample data</a> · <a href="#" data-sample="300">300</a> · <a href="#" data-sample="700">700 mails</a> · ' : '') +
+      'Only you can see your own outreach. <a href="privacy.html">Privacy</a></p></div>';
 
     $('signin').querySelectorAll('[data-sample]').forEach(function (a) {
       a.onclick = function (e) {
@@ -68,12 +72,19 @@
     $('nav').innerHTML = NAV.map(function (n) {
       var nb = OG.CW ? m.newReplies : m.recentReplies;
       var badge = n.key === 'replies' && nb ? '<span class="badge" aria-label="' + nb + (OG.CW ? ' to decide' : ' new this week') + '">' + nb + '</span>' : '';
-      return '<li><a href="#/' + n.key + '"' + (n.key === k ? ' aria-current="page"' : '') + '>' + OG.icon(n.icon) + '<span>' + n.label + '</span>' + badge + '</a></li>';
+      return '<li><a href="#/' + n.key + '"' + (n.short ? ' class="has-short"' : '') + (n.key === k ? ' aria-current="page"' : '') + '>' + OG.icon(n.icon) + '<span class="nl">' + n.label + '</span>' + (n.short ? '<span class="ns">' + n.short + '</span>' : '') + badge + '</a></li>';
     }).join('');
-    var dot = S.error ? 'err' : S.loading ? 'busy' : '';
-    $('sync-status').innerHTML = '<span class="dot ' + dot + '"></span>' +
-      (S.error ? 'Sync problem: see Settings' : S.loading ? 'Syncing…' : S.lastSync ? 'Live · updated ' + OG.fmtRel(S.lastSync) : 'Not synced yet') +
-      (OG.isDemo() ? '<br>Sample data' : '');
+    // Top bar: today's date on the left, Gmail sync status + Sync on the right.
+    var d = new Date();
+    $('topbar').innerHTML = '<span class="tb-date">' + d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) + '</span>' +
+      '<span class="tb-right">' + OG.gmail.topHtml() + '</span>';
+    // Sidebar footer: who is signed in, and Sign out.
+    var p = OG.isDemo() ? { name: 'Sample data', email: 'demo' } : (OG.auth.decode(S.token) || {});
+    var name = p.name || p.email || '';
+    $('side-user').innerHTML = (p.picture ? '<img class="su-pic" src="' + OG.esc(p.picture) + '" alt="" referrerpolicy="no-referrer">'
+        : '<span class="su-pic su-ini">' + OG.esc(OG.initials(name || '?')) + '</span>') +
+      '<span class="su-text"><span class="su-name">' + OG.esc(name) + '</span><span class="su-mail">' + OG.esc(p.email && p.email !== 'demo' ? p.email : '') + '</span></span>' +
+      '<button class="btn ghost su-out" data-signout title="Sign out" aria-label="Sign out">' + OG.icon('logout') + '</button>';
     renderBanner();
   }
 
@@ -83,7 +94,7 @@
     if ($('app').hidden) { showApp(); return; }
     renderNav();
     var k = route(), page = OG.pages[k], main = $('main');
-    document.title = page.title + ' · Outreach Dashboard';
+    document.title = page.title + ' · OpenGrad Outreach';
     if (pageChanged || current !== k) {
       current = k;
       main.innerHTML = '<div id="banner"></div><div id="page"></div>';
@@ -101,14 +112,15 @@
   // Top strip on every page: Gmail status + Sync button (and sample-data / error notes).
   function renderBanner() {
     var b = $('banner'); if (!b) return;
-    b.innerHTML = (OG.isDemo() ? '<div class="demo-banner">You are viewing <strong>made-up sample data</strong>. Sign out in Settings to use your own Gmail.</div>'
-      : (S.error ? '<div class="demo-banner">⚠️ ' + OG.esc(S.error) + ' Showing the last data we received.</div>' : '')) + OG.gmail.barHtml();
+    b.innerHTML = (OG.isDemo() ? '<div class="notice notice-muted"><div>You\'re viewing <strong>sample data</strong>, not real emails.</div></div>'
+      : (S.error ? '<div class="notice notice-warn"><div>' + OG.esc(S.error) + ' Showing the last data we received.</div></div>' : '')) + OG.gmail.bannerHtml();
   }
 
   /* ---------- clicks anywhere ---------- */
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (t.closest('[data-stop]')) return; // links inside clickable rows
+    if (t.closest('[data-signout]')) { if (confirm('Sign out of the dashboard on this browser?')) OG.signOut(); return; }
     var m = t.closest('[data-mark]');
     if (m) { e.preventDefault(); OG.mark(m.getAttribute('data-id'), m.getAttribute('data-mark')); return; }
     var o = t.closest('[data-open]');

@@ -132,6 +132,10 @@
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    send: '<path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4z"/>',
+    logout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4M5 12h11"/>',
+    reply: '<path d="M10 9 5 13l5 4"/><path d="M5 13h9a5 5 0 0 1 5 5v1"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
     linkedin: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10v7M8 7v.01M12 17v-4a2 2 0 0 1 4 0v4M12 10v7"/>'
   };
   OG.icon = function (name) {

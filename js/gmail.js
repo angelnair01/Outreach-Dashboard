@@ -78,29 +78,33 @@
       OG.emit({ navOnly: true });
     },
 
-    /* Strip shown at the top of every page */
-    barHtml: function () {
-      if (!OG.isDemo() && S.account && !S.account.connected) {
-        return '<div class="gmail-bar warn"><div><strong>Connect your Gmail</strong> to see your outreach here. ' +
+    /* Compact status for the top bar: "● Synced 20 s ago  [Sync]" */
+    topHtml: function () {
+      var st = OG.gmail.status();
+      var notConnected = !OG.isDemo() && S.account && !S.account.connected;
+      var dot = busy || st.state === 'loading' ? 'busy' : notConnected || st.state === 'stale' ? 'warn' : st.state === 'error' ? 'err' : '';
+      var text = busy ? 'Syncing…' : st.state === 'loading' ? 'Connecting…' : notConnected ? 'Gmail not connected'
+        : st.state === 'error' ? 'Sync problem' : st.state === 'stale' ? 'Sync paused'
+        : st.last ? 'Synced <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>' : 'Synced';
+      return '<span class="tb-sync" title="Your Gmail is checked automatically every minute"><span class="live-dot ' + dot + '"></span><span>' + text + '</span></span>' +
+        '<button class="btn tb-btn" data-gmail="' + (notConnected ? 'connect' : 'sync') + '"' + (busy ? ' disabled' : '') + ' title="Check my Gmail now">' +
+        OG.icon(notConnected ? 'mail' : 'refresh') + (notConnected ? 'Connect' : 'Sync') + '</button>';
+    },
+
+    /* Banner under the top bar: only when something needs your action. */
+    bannerHtml: function () {
+      if (OG.isDemo()) return '';
+      if (S.account && !S.account.connected) {
+        return '<div class="notice notice-accent"><div><strong>Connect your Gmail</strong> to see your outreach here. ' +
           'One time only: click, then Allow. Your mails stay private to you.</div>' +
           '<button class="btn primary" data-gmail="connect">' + OG.icon('mail') + 'Connect my Gmail</button></div>';
       }
       var st = OG.gmail.status();
-      var syncBtn = '<button class="btn" data-gmail="sync"' + (busy ? ' disabled' : '') + ' title="Check my Gmail now">' + OG.icon('refresh') + (busy ? 'Syncing…' : 'Sync') + '</button>';
-      var fixBtn = '<button class="btn primary" data-gmail="connect">Fix</button>';
-      if (busy) return '<div class="gmail-bar"><span class="sync-state"><span class="live-dot busy"></span><span>Checking your Gmail…</span></span>' + syncBtn + '</div>';
-      if (st.state === 'loading') return '<div class="gmail-bar"><span class="sync-state"><span class="live-dot busy"></span><span>Connecting…</span></span>' + syncBtn + '</div>';
-      if (st.state === 'error') {
-        return '<div class="gmail-bar alert"><span class="sync-state"><span class="live-dot err"></span><span>Auto-sync problem: ' + OG.esc(st.error) + '</span>' +
-          '</span>' + fixBtn + syncBtn + '</div>';
-      }
-      if (st.state === 'stale') {
-        return '<div class="gmail-bar alert"><span class="sync-state"><span class="live-dot warn"></span><span>Auto-sync isn\'t running. Last Gmail check <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>.</span>' +
-          '</span>' + fixBtn + syncBtn + '</div>';
-      }
-      return '<div class="gmail-bar"><span class="sync-state" title="Your Gmail is checked automatically every minute"><span class="live-dot"></span><span>Auto-sync on' +
-        (st.last ? ' · checked <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>' : '') + '</span></span>' + syncBtn + '</div>';
+      if (st.state === 'error') return '<div class="notice notice-danger"><div><strong>Gmail sync problem.</strong> ' + OG.esc(st.error) + '</div><button class="btn primary" data-gmail="connect">Fix</button></div>';
+      if (st.state === 'stale') return '<div class="notice notice-warn"><div><strong>Gmail sync is paused.</strong> Last check <span data-ago="' + st.last + '">' + agoText(st.last) + '</span>.</div><button class="btn primary" data-gmail="connect">Fix</button></div>';
+      return '';
     },
+    barHtml: function () { return OG.gmail.bannerHtml(); }, // older name, kept for compatibility
 
     /* ok = checked within the last 5 minutes (the timer runs every minute) */
     status: function () {

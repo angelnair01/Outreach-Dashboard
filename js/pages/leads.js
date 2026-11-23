@@ -120,7 +120,7 @@
 
   /* ---------- the page ---------- */
   OG.pages.leads = {
-    title: 'Add & log',
+    title: 'Add outreach',
     render: function (el) {
       var tracked = trackedEmails();
       var todo = S.leads.filter(function (l) { return l.status === 'To contact'; });
@@ -149,7 +149,7 @@
             '<td><button class="btn ghost" data-lead-remove="' + OG.esc(l.id) + '">Remove</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">Nothing logged yet.</div>';
 
-      el.innerHTML = '<div class="page-head"><div><h1>Add & log</h1><p class="muted">Add new contacts or record outreach here, with no need to open the sheet.</p></div>' +
+      el.innerHTML = '<div class="page-head"><div><h1>Add outreach</h1><p class="muted">Plan who to contact next, or record outreach you did outside Gmail (LinkedIn, calls, meetings).</p></div>' +
           '<div class="btn-row"><button class="btn primary" id="ld-add">+ Add a new contact</button><button class="btn" id="ld-log">+ Log outreach I did</button></div></div>' +
         '<section class="card" style="margin-bottom:16px"><h2>To contact (' + todo.length + ')</h2>' + todoHtml + '</section>' +
         '<section class="card"><h2>Outreach you logged (' + done.length + ')</h2>' +
