@@ -16,7 +16,7 @@
   /* ---- Company: guessed from the email, or set by you (saved in the sheet's Companies tab) ---- */
   function companyCell_(r) {
     var c = OG.companyOf(r);
-    return (c.name ? '<strong>' + OG.esc(c.name) + '</strong>' + (c.guessed ? ' <span class="muted small">(from email)</span>' : '') : '<span class="muted">Not set</span>') +
+    return (c.name ? '<strong>' + OG.esc(c.name) + '</strong>' + (c.guessed ? ' <span class="muted small">(from email address)</span>' : c.found ? ' <span class="muted small">(found in the emails)</span>' : '') : '<span class="muted">Not set</span>') +
       ' <button class="btn ghost small" id="pn-company-edit">' + (c.name ? 'Edit' : 'Add') + '</button>';
   }
 

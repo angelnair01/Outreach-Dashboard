@@ -16,7 +16,7 @@ const QUICK_THREADS = 50;      // most recently active threads, checked every mi
 const MAX_IMPORT_THREADS = 3000; // upper limit for the full / import checks
 const FULL_EVERY_MIN = 30;     // how often all ACTIVE threads are re-checked
 const MAX_SENDS_PER_RUN = 10;
-const COL = { id: 0, name: 1, email: 2, subject: 3, first: 4, fu: 5, status: 6, last: 7, snippet: 8, sentBy: 9 };
+const COL = { id: 0, name: 1, email: 2, subject: 3, first: 4, fu: 5, status: 6, last: 7, snippet: 8, sentBy: 9, company: 10 };
 
 /* ---------- the page people see ---------- */
 
@@ -109,8 +109,9 @@ function syncMine_(manual, forceFull) {
       const lastMsgMs = thread.getLastMessageDate().getTime();
 
       // Unchanged and nothing due: no extra Gmail reads. Claim old rows that had no sender.
-      if (prev && Math.abs(toMs_(prev[COL.last]) - lastMsgMs) < 1000 && !needsTimeCheck_(prev, now)) {
-        if (!String(prev[COL.sentBy] || '').trim()) out.push(prev.slice(0, 9));
+      // (Rows from before company detection have an empty Company cell: read them once to fill it in.)
+      if (prev && Math.abs(toMs_(prev[COL.last]) - lastMsgMs) < 1000 && !needsTimeCheck_(prev, now) && String(prev[COL.company] || '').trim()) {
+        if (!String(prev[COL.sentBy] || '').trim()) out.push(prev.slice(0, 11));
         return;
       }
 
@@ -146,9 +147,11 @@ function syncMine_(manual, forceFull) {
         }
       }
 
-      const vals = [id, a.name, a.email, a.subject, a.firstMs, fu, status, last, a.snippet];
+      // index 9 (Sent by) is filled in by the API; index 10 = company found in the emails ('(none)' = looked, nothing found)
+      const vals = [id, a.name, a.email, a.subject, a.firstMs, fu, status, last, a.snippet, null, a.company || '(none)'];
       const same = prev && vals.every(function (v, i) {
-        return i === COL.first || i === COL.last ? Math.abs(toMs_(prev[i]) - toMs_(v)) < 1000 : String(prev[i]) === String(v);
+        if (i === COL.sentBy) return true;
+        return i === COL.first || i === COL.last ? Math.abs(toMs_(prev[i]) - toMs_(v)) < 1000 : String(prev[i] == null ? '' : prev[i]) === String(v);
       }) && String(prev[COL.sentBy] || '').trim();
       if (!same) out.push(vals);
     });
@@ -205,7 +208,8 @@ function analyze_(thread, myAddrs) {
     lastMineMs: lastMineMs,
     fu: Math.min(fu, MAX_FOLLOWUPS),
     replied: replied, bounced: bounced && !replied,
-    snippet: replyMsg ? cleanReply_(replyMsg.getPlainBody()) : ''
+    snippet: replyMsg ? cleanReply_(replyMsg.getPlainBody()) : '',
+    company: detectCompany_(first, replyMsg)
   };
 }
 
@@ -247,6 +251,62 @@ function guessCompany_(email) {
   const name = parts[parts.length - 1] || '';
   if (name.length <= 4) return name.toUpperCase();
   return name.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+
+/* ---------- Company from the emails themselves ----------
+   Looks, in order, at: your subject ("OpenGrad x Lakeside School"), your email text
+   ("partnership between OpenGrad and Lakeside School"), and their reply's signature
+   ("Acme Labs Pvt Ltd"). Returns '' when nothing reliable is found. */
+const ORG_WORDS = /\b(ltd|limited|pvt|private|inc|llp|llc|corp|corporation|foundation|university|college|school|institute|institution|academy|group|technologies|technology|solutions|labs|trust|bank|company|enterprises|industries|ventures|capital|partners|consulting|systems|services|global|international|ngo|society|association|council|ministry|hospital)\b/i;
+const NOT_COMPANY = /^(you|your|your team|your organisation|your organization|the team|us|our team|opengrad|open grad|them|it|this|that|me|linkedin|gmail|google|google meet|whatsapp|instagram|twitter|x|facebook|zoom|teams|microsoft teams|youtube|email|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+
+function cleanCompany_(s) {
+  s = String(s || '').replace(/[“”"]/g, '').replace(/\s+/g, ' ').trim();
+  s = s.split(/\s+[-–—|:]\s+|[.,;!?()\n]/)[0].trim();                 // stop at punctuation / separators
+  s = s.replace(/^(the|team at|team)\s+/i, '').replace(/('s|’s)$/i, '').replace(/\s+(team|teams)$/i, '').trim();
+  const words = s.split(' ');
+  if (words.length > 7) s = words.slice(0, 7).join(' ');
+  if (s.length < 2 || s.length > 70 || NOT_COMPANY.test(s) || /open\s?grad/i.test(s) || /@|https?:/.test(s)) return '';
+  if (!/^[A-Z0-9]/.test(s)) return '';                                  // names start with a capital letter or digit
+  return s;
+}
+
+function detectCompany_(firstMsg, replyMsg) {
+  const subject = String(firstMsg.getSubject() || '').replace(/^(re|fwd?):\s*/i, '');
+  const tries = [
+    [subject, /\bOpen\s?Grad\s*(?:x|×|&|and|\+|\||\/|<>|–|-)\s*(.+)$/i],
+    [subject, /^(.+?)\s*(?:x|×|&|<>)\s*Open\s?Grad\b/i],
+    [subject, /\bpartnership\s+(?:with|between\s+Open\s?Grad\s+and)\s+(.+)$/i]
+  ];
+  let body = '';
+  try { body = String(firstMsg.getPlainBody() || '').slice(0, 3000); } catch (e) {}
+  tries.push(
+    [body, /partnership\s+between\s+Open\s?Grad\s+and\s+([^.,;!?\n]+)/i],
+    [body, /\bOpen\s?Grad\s*(?:x|×)\s*([A-Z][^.,;!?\n]{1,60})/],
+    [body, /\b(?:collaborat\w*|partner(?:ship|ing)?|work(?:ing)?)\s+with\s+([A-Z][\w&'’.\- ]{1,60}?)(?=[.,;!?\n]|\s+(?:to|on|in|for|and)\s)/]
+  );
+  for (let i = 0; i < tries.length; i++) {
+    const m = tries[i][1].exec(tries[i][0]);
+    const c = m && cleanCompany_(m[1]);
+    if (c) return c;
+  }
+  // Their reply's signature: a line near the end that looks like an organisation name.
+  if (replyMsg) {
+    let lines = [];
+    try { lines = cleanReply_(replyMsg.getPlainBody()).split('\n').map(function (l) { return l.trim(); }).filter(Boolean); } catch (e) {}
+    const tail = lines.slice(-8);
+    for (let j = tail.length - 1; j >= 0; j--) {
+      const l = tail[j];
+      if (ORG_WORDS.test(l) && l.length <= 80 && !/@|https?:|www\.|\+?\d[\d\s-]{7,}/.test(l) && l.split(' ').length <= 9) {
+        const c = cleanCompany_(l.replace(/^[|,\-–—\s]+/, ''));
+        if (c) return c;
+      }
+    }
+  }
+  // Their reply text: "partnership between OpenGrad and X" is rare there, so stop here.
+  // Last resort in the body: "at Lakeside School." / "the team at Delta Institute"
+  const at = /\b(?:team\s+at|here\s+at|at)\s+([A-Z][\w&'’.\-]*(?:\s+[A-Z][\w&'’.\-]*){0,5})(?=[.,;!?\n]|\s+[a-z])/.exec(body);
+  return at ? cleanCompany_(at[1]) : '';
 }
 
 // Preview the follow-up emails in the Execution log (run this from the editor; nothing is sent).

@@ -222,6 +222,8 @@
     // Organisation typed on the Add & log page for this email address
     var lead = (OG.state.leads || []).find(function (l) { return l.org && String(l.email || '').toLowerCase() === email; });
     if (lead) return { name: lead.org, set: true, fromLead: true };
+    // Found automatically in the emails (subject, your text, or their signature) by the Gmail sync
+    if (r.company) return { name: r.company, found: true };
     var g = OG.guessCompany(email);
     if (g) return { name: g, guessed: true };
     return { name: '', none: true };

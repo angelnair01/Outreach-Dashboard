@@ -150,6 +150,8 @@ function getData(me) {
     const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     let senderCol = -1;
     header.forEach(function (h, i) { if (senderCol < 0 && /^(sent by|account|sender|gmail account)$/i.test(String(h).trim())) senderCol = i; });
+    let companyCol = -1;
+    header.forEach(function (h, i) { if (companyCol < 0 && /^company$/i.test(String(h).trim())) companyCol = i; });
 
     const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
     values.forEach(function (r) {
@@ -177,6 +179,7 @@ function getData(me) {
         status: status,
         last: toMs_(r[7]),
         snippet: String(r[8] || ''),
+        company: companyCol >= 0 && !/^(-|\(none\))$/.test(String(r[companyCol] || '').trim()) ? String(r[companyCol] || '').trim() : '',
         stage: stage,
         due: /due|would send/i.test(status)
       });
@@ -293,7 +296,7 @@ function parseDay_(v) {
 
 /* ---------- Gmail sync (data sent in by each person's "Outreach Sync") ---------- */
 // Columns A-J of the Follow-up Log. "Sent by" (J) is always set here to the verified Gmail.
-const LOG_HEADER = ['Thread ID', 'Contact', 'Email', 'Subject', 'First Sent', 'Follow-ups Sent', 'Status', 'Last Action', 'Reply Snippet', 'Sent by'];
+const LOG_HEADER = ['Thread ID', 'Contact', 'Email', 'Subject', 'First Sent', 'Follow-ups Sent', 'Status', 'Last Action', 'Reply Snippet', 'Sent by', 'Company'];
 const ACCOUNTS_HEADER = ['Gmail address', 'Name to sign with', 'Active (Yes/No)'];
 
 // A Google access token from the sync script proves which Gmail is calling.
@@ -326,8 +329,11 @@ function logTab_() {
     sh = ss.insertSheet(LOG_TAB);
     sh.getRange(1, 1, 1, LOG_HEADER.length).setValues([LOG_HEADER]).setFontWeight('bold');
     sh.setFrozenRows(1);
-  } else if (String(sh.getRange(1, 10).getValue()).trim() !== 'Sent by') {
-    sh.getRange(1, 10).setValue('Sent by').setFontWeight('bold');
+  } else {
+    // Tabs made by older versions: add the missing headers (J = Sent by, K = Company).
+    const h = sh.getRange(1, 10, 1, 2).getValues()[0];
+    if (String(h[0]).trim() !== 'Sent by') sh.getRange(1, 10).setValue('Sent by').setFontWeight('bold');
+    if (String(h[1]).trim() !== 'Company') sh.getRange(1, 11).setValue('Company').setFontWeight('bold');
   }
   return sh;
 }
@@ -375,7 +381,7 @@ function syncPush_(me, rows, error) {
       const v = [
         String(r[0]).trim(), safeCell_(clean_(r[1], 200)), clean_(r[2], 200), safeCell_(clean_(r[3], 300)),
         r[4] ? new Date(Number(r[4]) || r[4]) : '', Number(r[5]) || 0, clean_(r[6], 120),
-        r[7] ? new Date(Number(r[7]) || r[7]) : '', safeCell_(clean_(r[8], 1000)), me
+        r[7] ? new Date(Number(r[7]) || r[7]) : '', safeCell_(clean_(r[8], 1000)), me, safeCell_(clean_(r[10], 120))
       ];
       if (rowOf[v[0]]) sh.getRange(rowOf[v[0]], 1, 1, LOG_HEADER.length).setValues([v]);
       else { appends.push(v); rowOf[v[0]] = -1; }
@@ -577,7 +583,7 @@ function addTestRows(n) {
     const first = new Date(now - (i % 120) * 86400000 - i * 60000);
     const fu = /follow-up 2|Stopped/.test(s) ? 2 : /follow-up 1/.test(s) ? 1 : 0;
     rows.push(['TEST-' + (100000 + i), 'Test Person ' + (i + 1), 'test' + (i + 1) + '@example.com', 'Load test mail ' + (i + 1),
-      first, fu, s, new Date(first.getTime() + fu * 7 * 86400000), s === 'Replied' ? 'Thanks, sounds interesting! (test reply ' + (i + 1) + ')' : '', me]);
+      first, fu, s, new Date(first.getTime() + fu * 7 * 86400000), s === 'Replied' ? 'Thanks, sounds interesting! (test reply ' + (i + 1) + ')' : '', me, 'Test Company ' + (i % 25 + 1)]);
   }
   const sh = logTab_();
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, LOG_HEADER.length).setValues(rows);
