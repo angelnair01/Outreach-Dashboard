@@ -29,12 +29,11 @@ const FOLLOWUP_TEXT = [
   'Looking forward to hearing from you.\n\n' +
   'Best regards,\n{{sender}}\nOpenGrad Foundation',
 
-  // Follow-up 2 (draft, waiting for approval)
+  // Follow-up 2 (final, approved)
   'Hi {{name}},\n\n' +
-  'I\'m following up once more on my note about a partnership between OpenGrad and {{company}}. I understand how busy things can get.\n\n' +
-  'If this is of interest, I\'d be happy to share a short overview or arrange a quick call at a time that works for you. ' +
-  'If someone else at {{company}} would be better placed to discuss this, I\'d be grateful if you could point me in the right direction.\n\n' +
-  'Thank you for your time, and I look forward to hearing from you.\n\n' +
+  'I hope this finds you well. I\'m following up regarding a potential partnership between OpenGrad and {{company}}.\n\n' +
+  'I believe there is a strong synergy between your organisation\'s work and OpenGrad\'s mission, and I would welcome the opportunity to explore how we could create value together.\n' +
+  'If it sounds of interest, I\'d welcome a short call whenever suits you.\n\n' +
   'Best regards,\n{{sender}}\nOpenGrad Foundation'
 ];
 
