@@ -1,7 +1,7 @@
 /* Replies: an inbox of everyone who wrote back. Compact rows, search, period, sort, 20 per page. */
 (function () {
   var OG = window.OG;
-  var PAGE = 20;
+  var PAGE = 25;
   var f = { q: '', period: 'all', sort: 'new', page: 0 };
   var PERIODS = [{ key: 'all', label: 'Any time' }, { key: '7', label: 'Last 7 days' }, { key: '30', label: 'Last 30 days' },
     { key: '60', label: 'Last 60 days' }, { key: '90', label: 'Last 90 days' }];

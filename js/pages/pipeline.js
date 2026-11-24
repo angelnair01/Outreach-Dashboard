@@ -3,8 +3,8 @@
 (function () {
   var OG = window.OG;
   var f = { q: '', company: 'all', period: 'all', channel: 'any' };
-  var shown = { replied: 20, waiting: 12, closed: 5 };
-  var STEP = { replied: 20, waiting: 24, closed: 20 };
+  var PER_COL = 10;                                  // cards per column page
+  var page = { replied: 0, waiting: 0, closed: 0 };  // each column pages on its own
 
   var COLS = [
     { key: 'replied', title: 'Replied: take it forward', hint: 'They wrote back. Set up a call or the next step.', tone: 'replied',
@@ -79,16 +79,23 @@
   function board(rows) {
     return '<div class="pboard">' + COLS.map(function (col) {
       var items = rows.filter(col.test).sort(col.sort);
-      var list = items.slice(0, shown[col.key]);
+      var pages = Math.max(1, Math.ceil(items.length / PER_COL));
+      if (page[col.key] >= pages) page[col.key] = pages - 1;
+      var start = page[col.key] * PER_COL, list = items.slice(start, start + PER_COL);
       return '<section class="pcol tone-' + col.tone + '">' +
         '<header class="pcol-head"><h2>' + col.title + '</h2><span class="pcount">' + items.length + '</span></header>' +
         '<p class="pcol-hint">' + col.hint + '</p>' +
         (list.length ? list.map(function (r) { return card(r, col); }).join('')
           : '<div class="pempty">' + (col.key === 'replied' ? 'No replies to act on right now.' : 'Nothing here.') + '</div>') +
-        (items.length > list.length ? '<button class="btn pmore" data-more="' + col.key + '">Show ' + Math.min(STEP[col.key], items.length - list.length) + ' more · ' + (items.length - list.length) + ' left</button>' : '') +
+        (items.length > PER_COL ? '<div class="pcol-pager"><span class="small muted">' + (start + 1) + '–' + (start + list.length) + ' of ' + items.length + '</span>' +
+          '<span class="pcol-nav"><button class="pg-arrow" data-cpg="' + col.key + '" data-dir="-1"' + (page[col.key] === 0 ? ' disabled' : '') + ' aria-label="Previous page">‹</button>' +
+          '<span class="small">Page ' + (page[col.key] + 1) + ' of ' + pages + '</span>' +
+          '<button class="pg-arrow" data-cpg="' + col.key + '" data-dir="1"' + (page[col.key] >= pages - 1 ? ' disabled' : '') + ' aria-label="Next page">›</button></span></div>' : '') +
         '</section>';
     }).join('') + '</div>';
   }
+
+  function firstPages() { page.replied = page.waiting = page.closed = 0; }
 
   function body(el) {
     var rows = filtered();
@@ -119,20 +126,21 @@
         '</div><div id="p-body"></div>';
 
       body(el);
-      el.querySelector('#p-q').addEventListener('input', function (e) { f.q = e.target.value; body(el); });
-      el.querySelector('#p-company').addEventListener('change', function (e) { f.company = e.target.value; body(el); });
-      el.querySelector('#p-period').addEventListener('change', function (e) { f.period = e.target.value; body(el); });
-      el.querySelector('#p-channel').addEventListener('change', function (e) { f.channel = e.target.value; body(el); });
-      el.querySelector('#p-clear').addEventListener('click', function () { f.q = ''; f.company = 'all'; f.period = 'all'; f.channel = 'any'; OG.pages.pipeline.render(el); });
-      if (!el._ogPipeBound) { // "show more" buttons: attach once per page element
+      el.querySelector('#p-q').addEventListener('input', function (e) { f.q = e.target.value; firstPages(); body(el); });
+      el.querySelector('#p-company').addEventListener('change', function (e) { f.company = e.target.value; firstPages(); body(el); });
+      el.querySelector('#p-period').addEventListener('change', function (e) { f.period = e.target.value; firstPages(); body(el); });
+      el.querySelector('#p-channel').addEventListener('change', function (e) { f.channel = e.target.value; firstPages(); body(el); });
+      el.querySelector('#p-clear').addEventListener('click', function () { f.q = ''; f.company = 'all'; f.period = 'all'; f.channel = 'any'; firstPages(); OG.pages.pipeline.render(el); });
+      if (!el._ogPipeBound) { // column page arrows: attach once per page element
         el._ogPipeBound = true;
         el.addEventListener('click', function (e) {
           var add = e.target.closest('[data-addco]');
           if (add) { e.stopPropagation(); OG.openPanel(add.getAttribute('data-addco'), { editCompany: true }); return; }
-          var m = e.target.closest('[data-more]');
-          if (!m) return;
-          var k = m.getAttribute('data-more'), y = window.scrollY;
-          shown[k] += STEP[k]; body(el); window.scrollTo(0, y);
+          var b = e.target.closest('[data-cpg]');
+          if (!b || b.disabled) return;
+          var k = b.getAttribute('data-cpg'), y = window.scrollY;
+          page[k] = Math.max(0, page[k] + Number(b.getAttribute('data-dir')));
+          body(el); window.scrollTo(0, y);
         });
       }
     },

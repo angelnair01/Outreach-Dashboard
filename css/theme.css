@@ -198,3 +198,10 @@ a.kpi:hover { border-color: var(--border-strong); }
 .pg-n[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
 .pg-gap { color: var(--text-3); padding: 0 4px; }
 @media (max-width: 820px) { .r-tools .select { flex: 1 1 45%; min-width: 0; } .r-pager { justify-content: center; } .pg .btn { padding: 6px 10px; } }
+
+/* ---------- Pipeline: pages inside each column ---------- */
+.pcol-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding: 8px 4px 2px; border-top: 1px solid var(--border); }
+.pcol-nav { display: inline-flex; align-items: center; gap: 6px; }
+.pg-arrow { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; font-size: 17px; line-height: 1; color: var(--text); }
+.pg-arrow:hover:not([disabled]) { border-color: var(--accent); color: var(--accent); }
+.pg-arrow[disabled] { opacity: .35; cursor: default; }
