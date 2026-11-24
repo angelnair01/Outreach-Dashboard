@@ -9,10 +9,7 @@
     var p = OG.auth.decode(OG.state.token) || {};
     return p.given_name || String(p.name || '').split(' ')[0] || '';
   }
-  function greeting() {
-    var h = new Date().getHours();
-    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  }
+  function greeting() { return 'Hello'; }
   function isReplied(r) { return r.stage === 'replied' || r.stage === 'call' || r.stage === 'whatsapp'; }
   function endOfToday() { var d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); }
 
