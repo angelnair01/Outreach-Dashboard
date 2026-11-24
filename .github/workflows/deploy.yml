@@ -1,6 +1,7 @@
 name: Deploy to GitHub Pages
 
-# Plain HTML/CSS/JS: no build step. Copies only the website files and publishes them.
+# Plain HTML/CSS/JS: no build step. One job collects and uploads the website files,
+# a second job publishes them (GitHub only hands an upload on once its job has finished).
 on:
   push:
     branches: [main]
@@ -16,11 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
       - name: Collect website files
@@ -31,5 +29,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
