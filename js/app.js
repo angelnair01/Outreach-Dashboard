@@ -38,6 +38,7 @@
       a.onclick = function (e) {
         e.preventDefault(); signingIn = true;
         OG.store.set('og.sample', Number(a.getAttribute('data-sample'))); OG._demo = null;
+        try { google.accounts.id.cancel(); } catch (x) {} // stop Google's automatic sign-in from taking over sample mode
         OG.signIn(OG.DEMO_TOKEN).then(function () { signingIn = false; showApp(); });
       };
     });
@@ -47,7 +48,7 @@
       return;
     }
     OG.auth.init(function (credential) {
-      if (signingIn) return;
+      if (signingIn || OG.isDemo()) return; // ignore a late automatic sign-in while viewing sample data
       signingIn = true;
       $('si-err').textContent = ''; $('si-status').textContent = 'Checking access…';
       OG.signIn(credential).then(function () { signingIn = false; showApp(); }, function (err) {
@@ -57,7 +58,7 @@
       });
     }).then(function () {
       OG.auth.renderButton($('si-google'));
-      if (!msg) { try { google.accounts.id.prompt(); } catch (e) {} } // returning users: signs in by itself
+      if (!msg && !demo) { try { google.accounts.id.prompt(); } catch (e) {} } // returning users: signs in by itself (not on ?demo)
     }, function (e) { $('si-err').textContent = e.message; });
   }
 
