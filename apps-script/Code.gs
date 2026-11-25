@@ -593,6 +593,83 @@ function addTestRows(n) {
 function addTestRows300() { addTestRows(300); }
 function addTestRows700() { addTestRows(700); }
 
+/* Realistic dummy outreach for trying the dashboard (run addDummyData from the editor).
+   ~350 emails over the last 90 days to ~30 organisations: replies with real-looking text,
+   people waiting after the first mail / follow-up 1 / follow-up 2, some follow-ups due today,
+   closed (no reply) and a few bounced. Email addresses end in @example.com, a reserved domain
+   that can never receive mail. Thread IDs start with TEST-, so removeTestRows deletes them all. */
+function addDummyData(n) {
+  n = Number(n) || 350;
+  const me = ownerEmail_();
+  const DAY = 86400000, now = Date.now();
+  let seed = 20261125;
+  const rnd = function () { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const pick = function (a) { return a[Math.floor(rnd() * a.length)]; };
+  const orgs = ['Lakeview Institute of Technology', 'Northbridge University', 'Sunrise Public School', 'Greenfield College', 'Horizon Business School',
+    'Bright Path Foundation', 'Crestwood Academy', 'Riverside International School', 'Summit Global University', 'Meridian Institute of Management',
+    'Oakwood College of Engineering', 'Blue Ridge Learning Trust', 'Silverline Technologies', 'Nexa Solutions Pvt Ltd', 'Pioneer EdTech',
+    'Harbor Point Ventures', 'Evergreen CSR Foundation', 'Starlight Skills Council', 'Westfield Polytechnic', 'Kestrel Analytics',
+    'Maple Leaf School', 'Arcadia Institute of Design', 'Vertex Consulting Group', 'Cedar Valley University', 'Orion Labs',
+    'Unity Education Society', 'Brookstone College', 'Aurora Women\'s College', 'Trident Capital Partners', 'Lotus Learning Centre'];
+  const first = ['Priya', 'Rahul', 'Ananya', 'Vikram', 'Sneha', 'Arjun', 'Kavya', 'Rohan', 'Meera', 'Aditya', 'Isha', 'Karan', 'Neha', 'Siddharth',
+    'Pooja', 'Aman', 'Divya', 'Nikhil', 'Riya', 'Varun', 'Tanvi', 'Harsh', 'Shreya', 'Manish', 'Aisha', 'Kunal', 'Nisha', 'Dev'];
+  const last = ['Sharma', 'Iyer', 'Menon', 'Kapoor', 'Nair', 'Rao', 'Das', 'Joshi', 'Pillai', 'Bose', 'Khan', 'Mehta', 'Reddy', 'Gupta', 'Verma', 'Shah'];
+  const subjects = ['OpenGrad x {org}', 'Partnership with {org}', 'Collaboration opportunity: OpenGrad and {org}',
+    'Supporting {org} students with OpenGrad', 'Quick idea for {org}'];
+  const replies = [
+    'Thanks for reaching out. This sounds interesting. Could we set up a short call next week?',
+    'Happy to explore this. Please share a brief deck or overview before we speak.',
+    'We would like to know more about the programme and costs involved. Can you call me on Thursday afternoon?',
+    'Thank you for the note. I have forwarded this to our placement head, who will get in touch with you.',
+    'Not right now, as we are in the middle of exams. Please check back in January.',
+    'This aligns well with our CSR priorities for next year. Let us connect after the 10th.',
+    'Could you share a few examples of institutions you are already working with?',
+    'Interesting proposal. I am travelling this week but free on Monday. Does 11 am work?',
+    'We already have a similar partnership in place, but I would be open to hearing what is different.',
+    'Thanks, please send over the details and our team will review them internally.',
+    'Yes, we would love to collaborate. Who would be the right person on your side to coordinate?',
+    'Kindly share your proposal on official letterhead and we will take it to the committee.'
+  ];
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const org = pick(orgs);
+    const fn = pick(first), ln = pick(last);
+    const domain = org.toLowerCase().replace(/pvt ltd|'s/g, '').replace(/[^a-z]+/g, '').slice(0, 18) + '.example.com';
+    const email = (fn + '.' + ln).toLowerCase() + (i % 7 === 0 ? i : '') + '@' + domain;
+    const subject = pick(subjects).replace('{org}', org);
+    const age = Math.floor(Math.pow(rnd(), 1.8) * 90);                     // days since the first email (more recent than old)
+    const firstAt = now - age * DAY - Math.floor(rnd() * 10) * 3600000;
+    let fu = 0, status, lastAt = firstAt, snippet = '';
+    const roll = rnd();
+    if (roll < 0.03 && age > 0) {
+      status = 'Bounced'; lastAt = firstAt + 3600000;
+    } else if (roll < 0.17 && age > 1) {
+      fu = age > 14 && rnd() < 0.4 ? (rnd() < 0.5 ? 1 : 2) : 0;            // some replied only after a follow-up
+      lastAt = Math.min(now - 3600000, firstAt + fu * 7 * DAY + (1 + Math.floor(rnd() * 5)) * DAY);
+      status = 'Replied'; snippet = pick(replies);
+    } else if (age < 7) {
+      status = 'Waiting (first mail sent)';
+    } else if (age < 14) {
+      if (rnd() < 0.2) { status = 'Follow-up 1 due (waiting for send window)'; lastAt = firstAt; }
+      else { fu = 1; lastAt = firstAt + 7 * DAY; status = 'Waiting (follow-up 1 sent)'; }
+    } else if (age < 21) {
+      if (rnd() < 0.15) { fu = 1; lastAt = firstAt + 7 * DAY; status = 'Follow-up 2 due (waiting for send window)'; }
+      else { fu = 2; lastAt = firstAt + 14 * DAY; status = 'Waiting (follow-up 2 sent)'; }
+    } else {
+      fu = 2; lastAt = firstAt + 14 * DAY; status = 'Stopped (no reply)';
+    }
+    rows.push(['TEST-' + (200000 + i), fn + ' ' + ln, email, subject, new Date(firstAt), fu, status, new Date(lastAt), snippet, me, org]);
+  }
+  rows.sort(function (a, b) { return b[4] - a[4]; });
+  const sh = logTab_();
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, LOG_HEADER.length).setValues(rows);
+  bumpVer_(me);
+  const count = function (re) { return rows.filter(function (r) { return re.test(r[6]); }).length; };
+  Logger.log('Added ' + rows.length + ' dummy emails for ' + me + ': ' + count(/^Replied$/) + ' replied, ' +
+    count(/^Waiting|due/) + ' waiting, ' + count(/Stopped/) + ' closed (no reply), ' + count(/Bounced/) + ' bounced. ' +
+    'Run removeTestRows to delete them again.');
+}
+
 // Deletes every row whose Thread ID starts with TEST- (your real rows are not touched).
 function removeTestRows() {
   const sh = logTab_();
